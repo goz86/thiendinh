@@ -4,6 +4,7 @@ import { Wind, Moon, Brain, ChevronRight, Plus, Heart, Zap, Leaf, Snowflake, Fla
 import type { BreathingTechnique } from '../types';
 import { getDailyQuote } from '../data/quotes';
 import { getStats } from '../utils/storage';
+import { ConfirmModal } from './ConfirmModal';
 
 interface LibraryProps {
   onSelect: (technique: BreathingTechnique) => void;
@@ -29,6 +30,7 @@ const iconMap: Record<string, React.ReactNode> = {
 };
 
 export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, onAuth, onLogout, user, darkMode, onToggleDark }) => {
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = React.useState(false);
   const quote = getDailyQuote();
   const stats = getStats();
 
@@ -51,21 +53,22 @@ export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, o
           <button
             onClick={() => {
               if (user) {
-                if (window.confirm('Bạn có muốn đăng xuất không?')) {
-                  onLogout();
-                }
+                setIsLogoutModalOpen(true);
               } else {
                 onAuth();
               }
             }}
-            className={`p-3 bg-white/60 dark:bg-white/5 backdrop-blur-md border rounded-full transition-all cursor-pointer shadow-sm ${
-              user ? 'border-green-400/50 bg-green-50 dark:bg-green-900/10' : 'border-[#E8DFC9] dark:border-white/10 hover:bg-white dark:hover:bg-white/10'
+            className={`p-3 backdrop-blur-md border rounded-full transition-all cursor-pointer shadow-sm relative group ${
+              user ? 'border-green-400/30 bg-green-50/40 dark:bg-green-900/10' : 'bg-white/60 dark:bg-white/5 border-[#E8DFC9] dark:border-white/10 hover:bg-white dark:hover:bg-white/10'
             }`}
             title={user ? 'Đăng xuất' : 'Đăng nhập'}
           >
+            {user && (
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white dark:border-[#0d0b09] rounded-full" />
+            )}
             {user ? (
-              <div className="w-5 h-5 flex items-center justify-center text-xs font-bold text-green-600 dark:text-green-400">
-                {user.email?.charAt(0).toUpperCase()}
+              <div className="w-5 h-5 flex items-center justify-center text-[10px] font-black text-green-700 dark:text-green-400 tracking-tighter">
+                {user.email?.split('@')[0].substring(0, 2).toUpperCase()}
               </div>
             ) : (
               <Zap className="w-5 h-5 text-[#A37B5C] dark:text-[#DECAA4]" />
@@ -147,6 +150,15 @@ export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, o
       <div className="mt-10 text-center">
         <p className="text-xs text-[#C2A385] dark:text-[#B0A090]/60">Thiền Định — © 2026 — goz ☁️</p>
       </div>
+      <ConfirmModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onConfirm={onLogout}
+        title="Đăng xuất"
+        message="Bạn có chắc chắn muốn đăng xuất? Lịch sử thiền của bạn sẽ vẫn được lưu an toàn trên đám mây."
+        confirmText="Đăng xuất"
+        cancelText="Để sau"
+      />
     </div>
   );
 };
