@@ -68,6 +68,11 @@ function App() {
     setView('library');
   };
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setView('library');
+  };
+
   return (
     <div className="min-h-screen transition-colors duration-500 text-[#5A4D41] dark:text-[#F5EDE0] bg-[#FCF9F3] dark:bg-[#0d0b09]">
       {view === 'visualizer' && activeTechnique ? (
@@ -95,6 +100,7 @@ function App() {
           onCustom={() => setView('custom')}
           onStats={() => setView('stats')}
           onAuth={() => setView('auth')}
+          onLogout={handleLogout}
           user={user}
           darkMode={darkMode}
           onToggleDark={() => setDarkMode(!darkMode)}

@@ -10,6 +10,7 @@ interface LibraryProps {
   onCustom: () => void;
   onStats: () => void;
   onAuth: () => void;
+  onLogout: () => void;
   user: any;
   darkMode: boolean;
   onToggleDark: () => void;
@@ -27,7 +28,7 @@ const iconMap: Record<string, React.ReactNode> = {
   sleep: <CloudMoon className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
 };
 
-export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, onAuth, user, darkMode, onToggleDark }) => {
+export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, onAuth, onLogout, user, darkMode, onToggleDark }) => {
   const quote = getDailyQuote();
   const stats = getStats();
 
@@ -48,11 +49,19 @@ export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, o
         
         <div className="flex gap-2">
           <button
-            onClick={onAuth}
+            onClick={() => {
+              if (user) {
+                if (window.confirm('Bạn có muốn đăng xuất không?')) {
+                  onLogout();
+                }
+              } else {
+                onAuth();
+              }
+            }}
             className={`p-3 bg-white/60 dark:bg-white/5 backdrop-blur-md border rounded-full transition-all cursor-pointer shadow-sm ${
               user ? 'border-green-400/50 bg-green-50 dark:bg-green-900/10' : 'border-[#E8DFC9] dark:border-white/10 hover:bg-white dark:hover:bg-white/10'
             }`}
-            title={user ? 'Tài khoản' : 'Đăng nhập'}
+            title={user ? 'Đăng xuất' : 'Đăng nhập'}
           >
             {user ? (
               <div className="w-5 h-5 flex items-center justify-center text-xs font-bold text-green-600 dark:text-green-400">
