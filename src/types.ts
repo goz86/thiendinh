@@ -11,3 +11,10 @@ export interface BreathingTechnique {
   };
   color: string;
 }
+export interface MeditationSession {
+  id: string;
+  date: string;
+  techniqueId: string;
+  techniqueName: string;
+  durationSeconds: number;
+}

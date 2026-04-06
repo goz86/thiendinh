@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowLeft, Flame, Clock, Trophy, Heart, Trash2 } from 'lucide-react';
-import { getStats, loadSessions, saveSessions, calculateStatsFromSessions } from '../utils/storage';
+import { loadSessions, saveSessions, calculateStatsFromSessions } from '../utils/storage';
 import { supabase } from '../lib/supabase';
 
 interface StatsProps {
@@ -11,7 +11,7 @@ export const Stats: React.FC<StatsProps> = ({ onBack }) => {
   const [localSessions] = React.useState(loadSessions());
   const [cloudSessions, setCloudSessions] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(false);
-  const [user, setUser] = React.useState<any>(null);
+  const [, setUser] = React.useState<any>(null);
 
   React.useEffect(() => {
     const checkUser = async () => {
