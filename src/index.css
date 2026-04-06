@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  body {
+    @apply bg-[#FCF9F3] text-[#5A4D41] antialiased m-0 overflow-x-hidden min-h-screen bg-cover bg-center bg-no-repeat bg-fixed;
+    font-family: 'Be Vietnam Pro', sans-serif;
+    background-image: url('/bg-zen.png');
+    transition: background-color 0.5s ease, color 0.5s ease;
+  }
+
+  /* Dark mode body */
+  .dark body {
+    @apply bg-[#0d0b09] text-[#F5EDE0];
+    background-image: none;
+    background-color: #0d0b09;
+  }
+
+  /* Smooth scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(163, 123, 92, 0.3);
+    border-radius: 3px;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: rgba(222, 202, 164, 0.2);
+  }
+}
+
+/* Breathing pulse glow for enhanced particle effect */
+@keyframes breathe-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(194, 163, 133, 0.1); }
+  50% { box-shadow: 0 0 60px rgba(194, 163, 133, 0.3); }
+}
+
+/* Selection color */
+::selection {
+  background: rgba(163, 123, 92, 0.2);
+  color: #4A3C31;
+}
+.dark ::selection {
+  background: rgba(222, 202, 164, 0.2);
+  color: #F5EDE0;
+}
