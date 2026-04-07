@@ -1,63 +1,26 @@
 import React from 'react';
 import { ArrowLeft, Flame, Clock, Trophy, Heart, Trash2 } from 'lucide-react';
-import { loadSessions, saveSessions, calculateStatsFromSessions } from '../utils/storage';
-import { supabase } from '../lib/supabase';
+import { loadSessions, saveSessions, calculateStatsFromSessions, syncWithCloud } from '../utils/storage';
 
 interface StatsProps {
   onBack: () => void;
 }
 
 export const Stats: React.FC<StatsProps> = ({ onBack }) => {
-  const [localSessions] = React.useState(loadSessions());
-  const [cloudSessions, setCloudSessions] = React.useState<any[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [, setUser] = React.useState<any>(null);
+  const [sessions, setSessions] = React.useState(loadSessions());
+  const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-      if (user) {
-        setLoading(true);
-        const { data } = await supabase
-          .from('meditation_sessions')
-          .select('*')
-          .order('created_at', { ascending: false });
-        
-        if (data) {
-          // Map cloud data to match local structure
-          const mappedCloud = data.map(s => ({
-            id: s.id,
-            date: new Date(s.created_at).toISOString().split('T')[0],
-            techniqueId: s.technique_id,
-            techniqueName: s.technique_name,
-            durationSeconds: s.duration_seconds
-          }));
-          setCloudSessions(mappedCloud);
-        }
-        setLoading(false);
+    const doSync = async () => {
+      setLoading(true);
+      const updated = await syncWithCloud();
+      if (updated) {
+        setSessions(loadSessions());
       }
+      setLoading(false);
     };
-    checkUser();
+    doSync();
   }, []);
-
-  const sessions = React.useMemo(() => {
-    // Basic merge: combine local and cloud, removing duplicates (simplified by using ID or date-duration-name)
-    const combined = [...localSessions];
-    
-    cloudSessions.forEach(cloudS => {
-      const exists = combined.find(localS => 
-        localS.date === cloudS.date && 
-        localS.techniqueId === cloudS.techniqueId && 
-        localS.durationSeconds === cloudS.durationSeconds
-      );
-      if (!exists) {
-        combined.push(cloudS);
-      }
-    });
-    
-    return combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [localSessions, cloudSessions]);
 
   const stats = React.useMemo(() => calculateStatsFromSessions(sessions), [sessions]);
 
@@ -121,20 +84,24 @@ export const Stats: React.FC<StatsProps> = ({ onBack }) => {
       {/* 7-Day Chart */}
       <div className="bg-white/60 dark:bg-white/5 backdrop-blur-md rounded-2xl border border-[#E8DFC9] dark:border-white/10 p-6 mb-8">
         <h3 className="text-sm font-medium text-[#8B7D6E] dark:text-[#B0A090] mb-4">7 ngày gần nhất (phút)</h3>
-        <div className="flex items-end justify-between gap-2 h-32">
+        <div className="flex justify-between gap-2 h-32">
           {stats.last7.map((mins, i) => (
-            <div key={i} className="flex flex-col items-center flex-1 gap-1">
-              <span className="text-xs font-mono text-[#A37B5C] dark:text-[#DECAA4]">{mins > 0 ? mins : ''}</span>
-              <div
-                className="w-full rounded-t-lg transition-all duration-500"
-                style={{
-                  height: `${Math.max((mins / maxMinutes) * 100, 4)}%`,
-                  background: mins > 0
-                    ? 'linear-gradient(to top, #C2A385, #A37B5C)'
-                    : 'rgba(200,190,175,0.3)',
-                  minHeight: '4px'
-                }}
-              />
+            <div key={i} className="flex flex-col items-center flex-1 gap-1 h-full">
+              <span className="text-xs font-mono text-[#A37B5C] dark:text-[#DECAA4] min-h-[16px]">
+                {mins > 0 ? mins : ''}
+              </span>
+              <div className="w-full relative flex-1">
+                <div
+                  className="absolute bottom-0 w-full rounded-t-lg transition-all duration-500"
+                  style={{
+                    height: `${Math.max((mins / maxMinutes) * 100, 4)}%`,
+                    background: mins > 0
+                      ? 'linear-gradient(to top, #C2A385, #A37B5C)'
+                      : 'rgba(200,190,175,0.3)',
+                    minHeight: '4px'
+                  }}
+                />
+              </div>
               <span className="text-[10px] text-[#8B7D6E] dark:text-[#B0A090]">{orderedLabels[i]}</span>
             </div>
           ))}

@@ -4,10 +4,11 @@ import { Visualizer } from './components/Visualizer';
 import { CustomForm } from './components/CustomForm';
 import { Stats } from './components/Stats';
 import { Auth } from './components/Auth';
+import { AdminDashboard } from './components/AdminDashboard';
 import { supabase } from './lib/supabase';
 import type { BreathingTechnique } from './types';
 
-type View = 'library' | 'custom' | 'visualizer' | 'stats' | 'auth';
+type View = 'library' | 'custom' | 'visualizer' | 'stats' | 'auth' | 'admin';
 
 function App() {
   const [view, setView] = useState<View>('library');
@@ -74,7 +75,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen transition-colors duration-500 text-[#5A4D41] dark:text-[#F5EDE0] bg-[#FCF9F3] dark:bg-[#0d0b09]">
+    <div className="min-h-screen transition-colors duration-500 text-[#5A4D41] dark:text-[#F5EDE0] bg-transparent">
       {view === 'visualizer' && activeTechnique ? (
         <Visualizer
           technique={activeTechnique}
@@ -94,6 +95,10 @@ function App() {
         <Stats
           onBack={() => setView('library')}
         />
+      ) : view === 'admin' ? (
+        <AdminDashboard
+          onBack={() => setView('library')}
+        />
       ) : (
         <Library
           onSelect={handleSelect}
@@ -101,6 +106,7 @@ function App() {
           onStats={() => setView('stats')}
           onAuth={() => setView('auth')}
           onLogout={handleLogout}
+          onAdmin={() => setView('admin')}
           user={user}
           darkMode={darkMode}
           onToggleDark={() => setDarkMode(!darkMode)}

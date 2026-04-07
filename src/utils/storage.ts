@@ -1,4 +1,5 @@
 import type { MeditationSession as Session } from '../types';
+import { supabase } from '../lib/supabase';
 
 const STORAGE_KEY = 'mindful-meditation-sessions';
 
@@ -78,4 +79,50 @@ export const calculateStatsFromSessions = (sessions: Session[]) => {
 export const getStats = () => {
   const sessions = loadSessions();
   return calculateStatsFromSessions(sessions);
+};
+
+export const syncWithCloud = async (): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const { data } = await supabase
+      .from('meditation_sessions')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (data) {
+      const local = loadSessions();
+      const combined = [...local];
+      let updated = false;
+
+      data.forEach((s: any) => {
+        const cloudDate = new Date(s.created_at).toISOString().split('T')[0];
+        const exists = combined.find((localS: Session) => 
+          localS.date === cloudDate && 
+          localS.techniqueId === s.technique_id && 
+          localS.durationSeconds === s.duration_seconds
+        );
+        if (!exists) {
+          combined.push({
+            id: s.id,
+            date: cloudDate,
+            techniqueId: s.technique_id,
+            techniqueName: s.technique_name,
+            durationSeconds: s.duration_seconds
+          });
+          updated = true;
+        }
+      });
+
+      if (updated) {
+        combined.sort((a: Session, b: Session) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        saveSessions(combined);
+        return true;
+      }
+    }
+  } catch (error) {
+    console.error('Lỗi khi đồng bộ dữ liệu:', error);
+  }
+  return false;
 };

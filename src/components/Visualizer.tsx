@@ -96,6 +96,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [showMusicPicker, setShowMusicPicker] = useState(false);
   const [customMusicList, setCustomMusicList] = useState<{id: string, label: string}[]>([]);
+  const [bgVolume, setBgVolume] = useState(0.5);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const bgAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -109,7 +110,6 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
   const inhaleAudioRef = useRef<HTMLAudioElement | null>(null);
   const exhaleAudioRef = useRef<HTMLAudioElement | null>(null);
   const holdAudioRef = useRef<HTMLAudioElement | null>(null);
-  const finishAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const layer1 = useMemo(() => generateParticles(100, 60, 300), []);
   const layer2 = useMemo(() => generateParticles(80, 100, 450), []);
@@ -121,7 +121,6 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
   useEffect(() => {
     // Volume control for pre-loaded refs
     if (audioRef.current) audioRef.current.volume = 0.5;
-    if (finishAudioRef.current) finishAudioRef.current.volume = 0.7;
     if (inhaleAudioRef.current) inhaleAudioRef.current.volume = 0.9;
     if (exhaleAudioRef.current) exhaleAudioRef.current.volume = 0.9;
     if (holdAudioRef.current) holdAudioRef.current.volume = 0.9;
@@ -159,7 +158,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
     osc.frequency.setValueAtTime(freq, ctx.currentTime);
     
     gain.gain.setValueAtTime(0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 1); // Soft fade in
+    gain.gain.linearRampToValueAtTime(bgVolume * 0.15, ctx.currentTime + 1); // Soft fade in, proportional to bgVolume
     
     osc.connect(gain);
     gain.connect(ctx.destination);
@@ -193,6 +192,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
     } else {
       stopOscillator();
       setupAudio(bgMusic);
+      if (bgAudioRef.current) bgAudioRef.current.volume = bgVolume;
       if (isActive) {
         bgAudioRef.current?.play().catch(() => {});
       } else {
@@ -200,6 +200,16 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
       }
     }
   }, [bgMusic, isActive, playOscillator, stopOscillator]);
+
+  // Sync volume to audio element and oscillator
+  useEffect(() => {
+    if (bgAudioRef.current) {
+      bgAudioRef.current.volume = bgVolume;
+    }
+    if (gainNodeRef.current && audioContextRef.current) {
+      gainNodeRef.current.gain.setTargetAtTime(bgVolume * 0.15, audioContextRef.current.currentTime, 0.1);
+    }
+  }, [bgVolume]);
 
   // Overall cleanup on unmount
   useEffect(() => {
@@ -230,15 +240,74 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
 
   const playChime = useCallback(() => {
     if (soundEnabled && audioRef.current) {
-      // Ensure volume is set each time
       audioRef.current.volume = 0.5;
       audioRef.current.currentTime = 0;
       const playPromise = audioRef.current.play();
-      
       if (playPromise !== undefined) {
         playPromise.catch(error => {
           console.error("Lỗi phát tiếng chuông:", error);
         });
+      }
+    }
+  }, [soundEnabled]);
+
+  // Synthesized singing bowl / gong for finish
+  const playFinishGong = useCallback(() => {
+    if (!soundEnabled) return;
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const now = ctx.currentTime;
+
+      // Create multiple harmonics for a rich singing bowl tone
+      const frequencies = [261.6, 523.3, 784.9, 1046.5]; // C4, C5, G5, C6
+      const gains = [0.4, 0.25, 0.15, 0.08];
+      const durations = [4, 3.5, 3, 2.5];
+
+      frequencies.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
+        // Slight detune for warmth
+        osc.detune.setValueAtTime(Math.random() * 6 - 3, now);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(gains[i], now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + durations[i]);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + durations[i]);
+      });
+
+      // Add a soft metallic "ting" attack
+      const noise = ctx.createBufferSource();
+      const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
+      const noiseData = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < noiseData.length; i++) {
+        noiseData[i] = (Math.random() * 2 - 1) * 0.3;
+      }
+      noise.buffer = noiseBuffer;
+      const noiseGain = ctx.createGain();
+      const noiseFilter = ctx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.setValueAtTime(3000, now);
+      noiseFilter.Q.setValueAtTime(5, now);
+      noiseGain.gain.setValueAtTime(0.15, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noise.start(now);
+
+      // Clean up context after all sounds finish
+      setTimeout(() => ctx.close(), 5000);
+    } catch (e) {
+      console.error('Lỗi phát tiếng gong:', e);
+      // Fallback to regular chime
+      if (audioRef.current) {
+        audioRef.current.volume = 0.8;
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(() => {});
       }
     }
   }, [soundEnabled]);
@@ -324,13 +393,6 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
       }).catch(() => {});
     }
 
-    if (finishAudioRef.current) {
-      finishAudioRef.current.play().then(() => {
-        finishAudioRef.current?.pause();
-        if (finishAudioRef.current) finishAudioRef.current.currentTime = 0;
-      }).catch(() => {});
-    }
-
     if (inhaleAudioRef.current) inhaleAudioRef.current.load();
     if (exhaleAudioRef.current) exhaleAudioRef.current.load();
     if (holdAudioRef.current) holdAudioRef.current.load();
@@ -371,24 +433,8 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
       };
       saveToCloud();
       
-      // Play a stronger finish sound (Gong)
-      // Small timeout ensures it plays AFTER the state change is handled
-      setTimeout(() => {
-        if (soundEnabled && finishAudioRef.current) {
-          console.log("Hết giờ - Đang phát tiếng Gong");
-          finishAudioRef.current.volume = 1.0; // Max volume for gong
-          finishAudioRef.current.currentTime = 0;
-          finishAudioRef.current.play().catch(e => {
-            console.error("Lỗi phát âm thanh kết thúc:", e);
-            // Fallback to regular chime
-            if (audioRef.current) {
-              audioRef.current.volume = 0.8;
-              audioRef.current.currentTime = 0;
-              audioRef.current.play().catch(() => {});
-            }
-          });
-        }
-      }, 100);
+      // Play finish gong sound
+      setTimeout(() => playFinishGong(), 100);
       
       // Auto-reset timer
       setSessionTime(0);
@@ -513,7 +559,9 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
   const remainingTime = targetDuration > 0 ? Math.max(0, targetDuration * 60 - sessionTime) : null;
 
   return (
-    <div className="absolute inset-0 bg-gradient-to-b from-[#FCF9F3]/80 to-[#FCF9F3]/95 dark:from-[#1a1612]/95 dark:to-[#0d0b09]/98 backdrop-blur-[3px] flex flex-col items-center justify-center z-50 overflow-hidden">
+    <div 
+      className="absolute inset-0 bg-gradient-to-b from-[#FCF9F3]/80 to-[#FCF9F3]/95 dark:from-[#1a1612]/95 dark:to-[#0d0b09]/98 backdrop-blur-[3px] flex flex-col items-center justify-center z-50 overflow-hidden"
+    >
       
       {/* Header — hidden in zen mode */}
       <AnimatePresence>
@@ -624,6 +672,17 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
       <AnimatePresence>
         {showMusicPicker && (
           <motion.div
+            key="music-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-40"
+            onClick={() => setShowMusicPicker(false)}
+          />
+        )}
+        {showMusicPicker && (
+          <motion.div
+            key="music-panel"
             initial={{ opacity: 0, x: 20, scale: 0.9 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 20, scale: 0.9 }}
@@ -653,6 +712,29 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
                 </button>
               ))}
             </div>
+            
+            {/* Volume Slider */}
+            {bgMusic !== 'none' && (
+              <div className="mt-3 pt-3 border-t border-[#F2EAE0] dark:border-white/10">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Volume2 className="w-3.5 h-3.5 text-[#A37B5C] dark:text-[#DECAA4] flex-shrink-0" />
+                  <span className="text-xs text-[#8B7D6E] dark:text-[#B0A090]">Âm lượng</span>
+                  <span className="text-xs text-[#A37B5C] dark:text-[#DECAA4] ml-auto font-mono">{Math.round(bgVolume * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={bgVolume}
+                  onChange={(e) => setBgVolume(parseFloat(e.target.value))}
+                  className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+                  style={{
+                    background: `linear-gradient(to right, #A37B5C ${bgVolume * 100}%, #E8DFC9 ${bgVolume * 100}%)`
+                  }}
+                />
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -661,6 +743,17 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
       <AnimatePresence>
         {showSettings && (
           <motion.div
+            key="settings-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-40"
+            onClick={() => setShowSettings(false)}
+          />
+        )}
+        {showSettings && (
+          <motion.div
+            key="settings-panel"
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
@@ -735,6 +828,31 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
                   </div>
                 )}
               </div>
+
+              {/* Background Music Volume */}
+              {bgMusic !== 'none' && (
+                <div className="flex flex-col gap-3 pt-1 border-t border-[#F2EAE0] dark:border-white/10 mt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[15px] text-[#5A4D41] dark:text-[#F5EDE0] flex items-center gap-2 font-medium">
+                      <Music className="w-5 h-5 text-[#A37B5C]"/>
+                      Âm lượng nhạc
+                    </span>
+                    <span className="text-sm font-mono text-[#A37B5C] dark:text-[#DECAA4]">{Math.round(bgVolume * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={bgVolume}
+                    onChange={(e) => setBgVolume(parseFloat(e.target.value))}
+                    className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-[#E8DFC9] dark:bg-white/10 accent-[#A37B5C]"
+                    style={{
+                      background: `linear-gradient(to right, #A37B5C ${bgVolume * 100}%, #E8DFC9 ${bgVolume * 100}%)`
+                    }}
+                  />
+                </div>
+              )}
 
               {/* Chime toggle */}
               <div className="flex items-center justify-between">
@@ -825,45 +943,47 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
         )}
       </AnimatePresence>
 
-      {/* Cosmic Vortex Layers */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 w-full h-full opacity-90">
-        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 120, ease: "linear" }} className="absolute flex items-center justify-center">
-          <motion.div animate={{ scale: getScale(0.8) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
-            {renderParticles(layer1)}
-          </motion.div>
-        </motion.div>
-
-        <motion.div animate={{ rotate: -360 }} transition={{ repeat: Infinity, duration: 180, ease: "linear" }} className="absolute flex items-center justify-center">
-          <motion.div animate={{ scale: getScale(1.1) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
-            {renderParticles(layer2)}
-          </motion.div>
-        </motion.div>
-
-        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 250, ease: "linear" }} className="absolute flex items-center justify-center">
-          <motion.div animate={{ scale: getScale(1.4) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
-            {renderParticles(layer3)}
-          </motion.div>
-        </motion.div>
-
-        {/* Glow rings that pulse with breathing */}
-        {isActive && (
-          <>
-            <motion.div
-              animate={{ scale: getScale(0.6), opacity: [0.1, 0.25, 0.1] }}
-              transition={{ duration: getDuration(), ease: "easeInOut", opacity: { repeat: Infinity, duration: 3 } }}
-              className="absolute w-[400px] h-[400px] rounded-full border border-[#DECAA4]/20 dark:border-[#DECAA4]/10"
-            />
-            <motion.div
-              animate={{ scale: getScale(0.9), opacity: [0.05, 0.15, 0.05] }}
-              transition={{ duration: getDuration(), ease: "easeInOut", opacity: { repeat: Infinity, duration: 4 } }}
-              className="absolute w-[550px] h-[550px] rounded-full border border-[#8BA6B8]/15 dark:border-[#8BA6B8]/10"
-            />
-          </>
-        )}
-      </div>
 
       {/* Core breathing orb */}
       <div className="relative flex items-center justify-center w-[300px] h-[300px] z-20 mt-12 bg-transparent">
+        
+        
+        {/* Cosmic Vortex Layers */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 w-full h-full opacity-90">
+          <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 120, ease: "linear" }} className="absolute flex items-center justify-center">
+            <motion.div animate={{ scale: getScale(0.8) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
+              {renderParticles(layer1)}
+            </motion.div>
+          </motion.div>
+
+          <motion.div animate={{ rotate: -360 }} transition={{ repeat: Infinity, duration: 180, ease: "linear" }} className="absolute flex items-center justify-center">
+            <motion.div animate={{ scale: getScale(1.1) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
+              {renderParticles(layer2)}
+            </motion.div>
+          </motion.div>
+
+          <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 250, ease: "linear" }} className="absolute flex items-center justify-center">
+            <motion.div animate={{ scale: getScale(1.4) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
+              {renderParticles(layer3)}
+            </motion.div>
+          </motion.div>
+
+          {/* Glow rings that pulse with breathing */}
+          {isActive && (
+            <>
+              <motion.div
+                animate={{ scale: getScale(0.6), opacity: [0.1, 0.25, 0.1] }}
+                transition={{ duration: getDuration(), ease: "easeInOut", opacity: { repeat: Infinity, duration: 3 } }}
+                className="absolute w-[400px] h-[400px] rounded-full border border-[#DECAA4]/20 dark:border-[#DECAA4]/10"
+              />
+              <motion.div
+                animate={{ scale: getScale(0.9), opacity: [0.05, 0.15, 0.05] }}
+                transition={{ duration: getDuration(), ease: "easeInOut", opacity: { repeat: Infinity, duration: 4 } }}
+                className="absolute w-[550px] h-[550px] rounded-full border border-[#8BA6B8]/15 dark:border-[#8BA6B8]/10"
+              />
+            </>
+          )}
+        </div>
         <motion.div
           animate={{ scale: getScale(1.2) }}
           transition={{ duration: getDuration(), ease: "easeInOut" }}
@@ -950,13 +1070,13 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
         <button
           onClick={toggleTimer}
           disabled={appState === 'countdown'}
-          className="px-8 sm:px-12 py-4 bg-[#5A4D41] text-white rounded-full font-medium hover:bg-[#4A3C31] transition-all shadow-[0_8px_20px_rgba(90,77,65,0.2)] hover:shadow-[0_10px_25px_rgba(90,77,65,0.3)] hover:-translate-y-1 cursor-pointer text-lg border border-[#4A3C31] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          className="flex-1 max-w-[160px] sm:max-w-[200px] flex justify-center items-center py-4 bg-[#5A4D41] text-white rounded-full font-medium hover:bg-[#4A3C31] transition-all shadow-[0_8px_20px_rgba(90,77,65,0.2)] hover:shadow-[0_10px_25px_rgba(90,77,65,0.3)] hover:-translate-y-1 cursor-pointer text-lg border border-[#4A3C31] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
         >
           {appState === 'countdown' ? 'Đang chuẩn bị...' : isActive ? 'Tạm Dừng' : (sessionTime > 0 ? 'Tiếp Tục' : 'Bắt Đầu')}
         </button>
         <button
           onClick={resetTimer}
-          className={`px-6 sm:px-10 py-4 bg-white/70 dark:bg-white/10 backdrop-blur-[2px] text-[#5A4D41] dark:text-[#DECAA4] border border-[#DECAA4] dark:border-white/10 rounded-full font-medium hover:bg-[#FCF9F3] dark:hover:bg-white/20 transition-all shadow-sm hover:shadow-md cursor-pointer text-lg whitespace-nowrap ${
+          className={`flex-1 max-w-[160px] sm:max-w-[200px] flex justify-center items-center py-4 bg-white/70 dark:bg-white/10 backdrop-blur-[2px] text-[#5A4D41] dark:text-[#DECAA4] border border-[#DECAA4] dark:border-white/10 rounded-full font-medium hover:bg-[#FCF9F3] dark:hover:bg-white/20 transition-all shadow-sm hover:shadow-md cursor-pointer text-lg whitespace-nowrap ${
             sessionTime > 0 ? 'opacity-100 flex-shrink-0' : 'hidden opacity-0 pointer-events-none'
           }`}
         >
@@ -969,11 +1089,6 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
       <audio 
         ref={audioRef} 
         src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3" 
-        preload="auto" 
-      />
-      <audio 
-        ref={finishAudioRef} 
-        src="https://cdn.pixabay.com/audio/2022/03/15/audio_783d1a3356.mp3" 
         preload="auto" 
       />
       <audio ref={inhaleAudioRef} src="/hit%20vao.mp3" preload="auto" />
