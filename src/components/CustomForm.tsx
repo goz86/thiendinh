@@ -16,26 +16,26 @@ const StepControl: React.FC<{
   subtitle: string;
 }> = ({ label, value, min, max, onChange, subtitle }) => {
   return (
-    <div className="flex flex-col items-center gap-3 p-6 bg-white/50 dark:bg-white/5 backdrop-blur-md rounded-2xl border border-[#E8DFC9] dark:border-white/10 shadow-sm">
-      <span className="text-sm font-medium text-[#8B7D6E] dark:text-[#B0A090]">{label}</span>
-      <div className="flex items-center gap-4">
+    <div className="flex flex-col items-center gap-1 sm:gap-3 p-3 sm:p-6 bg-white/50 dark:bg-white/5 backdrop-blur-md rounded-2xl border border-[#E8DFC9] dark:border-white/10 shadow-sm">
+      <span className="text-xs sm:text-sm font-medium text-[#8B7D6E] dark:text-[#B0A090]">{label}</span>
+      <div className="flex items-center gap-1.5 sm:gap-4">
         <button
           onClick={() => onChange(Math.max(min, value - 1))}
           disabled={value <= min}
-          className="w-10 h-10 flex items-center justify-center rounded-full bg-[#FCF9F3] dark:bg-white/5 border border-[#DECAA4] dark:border-white/10 text-[#A37B5C] dark:text-[#DECAA4] hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+          className="w-7 h-7 sm:w-10 sm:h-10 flex-shrink-0 flex items-center justify-center rounded-full bg-[#FCF9F3] dark:bg-white/5 border border-[#DECAA4] dark:border-white/10 text-[#A37B5C] dark:text-[#DECAA4] hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
         >
-          <Minus className="w-4 h-4" />
+          <Minus className="w-3 h-3 sm:w-4 sm:h-4" />
         </button>
-        <span className="text-5xl font-light font-mono text-[#4A3C31] dark:text-[#F5EDE0] w-16 text-center">{value}</span>
+        <span className="text-3xl sm:text-5xl font-light font-mono text-[#4A3C31] dark:text-[#F5EDE0] w-8 sm:w-16 text-center">{value}</span>
         <button
           onClick={() => onChange(Math.min(max, value + 1))}
           disabled={value >= max}
-          className="w-10 h-10 flex items-center justify-center rounded-full bg-[#FCF9F3] dark:bg-white/5 border border-[#DECAA4] dark:border-white/10 text-[#A37B5C] dark:text-[#DECAA4] hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+          className="w-7 h-7 sm:w-10 sm:h-10 flex-shrink-0 flex items-center justify-center rounded-full bg-[#FCF9F3] dark:bg-white/5 border border-[#DECAA4] dark:border-white/10 text-[#A37B5C] dark:text-[#DECAA4] hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
         </button>
       </div>
-      <span className="text-xs text-[#C2A385] dark:text-[#B0A090]">{subtitle}</span>
+      <span className="text-[10px] sm:text-xs text-[#C2A385] dark:text-[#B0A090] mt-1 sm:mt-0">{subtitle}</span>
     </div>
   );
 };
@@ -75,7 +75,7 @@ export const CustomForm: React.FC<CustomFormProps> = ({ onStart, onBack }) => {
       </div>
 
       {/* Controls */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-8">
         <StepControl label="Hít vào" value={inhale} min={1} max={15} onChange={setInhale} subtitle="giây" />
         <StepControl label="Giữ hơi" value={hold} min={0} max={20} onChange={setHold} subtitle="giây" />
         <StepControl label="Thở ra" value={exhale} min={1} max={20} onChange={setExhale} subtitle="giây" />

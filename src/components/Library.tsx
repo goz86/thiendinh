@@ -1,9 +1,9 @@
 import React from 'react';
 import { techniques } from '../data';
-import { Wind, Moon, Brain, ChevronRight, Plus, Heart, Zap, Leaf, Snowflake, Flame, CloudMoon, BarChart3, Sun, MoonIcon } from 'lucide-react';
+import { Wind, Moon, Brain, ChevronRight, Plus, Heart, Zap, Leaf, Snowflake, Flame, CloudMoon, BarChart3, Sun, MoonIcon, User, Shield, Bell, Disc, MessageSquare } from 'lucide-react';
 import type { BreathingTechnique } from '../types';
 import { getDailyQuote } from '../data/quotes';
-import { getStats } from '../utils/storage';
+import { getStats, syncWithCloud } from '../utils/storage';
 import { ConfirmModal } from './ConfirmModal';
 
 interface LibraryProps {
@@ -12,6 +12,10 @@ interface LibraryProps {
   onStats: () => void;
   onAuth: () => void;
   onLogout: () => void;
+  onAdmin: () => void;
+  onMala: () => void;
+  onTempleTools: () => void;
+  onJournal: () => void;
   user: any;
   darkMode: boolean;
   onToggleDark: () => void;
@@ -29,10 +33,22 @@ const iconMap: Record<string, React.ReactNode> = {
   sleep: <CloudMoon className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
 };
 
-export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, onAuth, onLogout, user, darkMode, onToggleDark }) => {
+export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, onAuth, onLogout, onAdmin, onMala, onTempleTools, onJournal, user, darkMode, onToggleDark }) => {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = React.useState(false);
+  const [stats, setStats] = React.useState(getStats());
   const quote = getDailyQuote();
-  const stats = getStats();
+
+  React.useEffect(() => {
+    setStats(getStats());
+    
+    if (user) {
+      syncWithCloud().then((updated) => {
+        if (updated) {
+          setStats(getStats());
+        }
+      });
+    }
+  }, [user]);
 
   return (
     <div className="min-h-screen p-6 max-w-4xl mx-auto pt-10 overflow-y-auto pb-20">
@@ -50,6 +66,15 @@ export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, o
         </button>
         
         <div className="flex gap-2">
+          {user && user.email === 'heeffgh123@gmail.com' && (
+            <button
+              onClick={onAdmin}
+              className="p-3 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-[#E8DFC9] dark:border-white/10 rounded-full hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer shadow-sm flex items-center justify-center"
+              title="Quản trị hệ thống"
+            >
+              <Shield className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
+            </button>
+          )}
           <button
             onClick={() => {
               if (user) {
@@ -71,7 +96,7 @@ export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, o
                 {user.email?.split('@')[0].substring(0, 2).toUpperCase()}
               </div>
             ) : (
-              <Zap className="w-5 h-5 text-[#A37B5C] dark:text-[#DECAA4]" />
+              <User className="w-5 h-5 text-[#A37B5C] dark:text-[#DECAA4]" />
             )}
           </button>
           
@@ -144,6 +169,55 @@ export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, o
           <h3 className="text-lg font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Tạo Bài Tập Riêng</h3>
           <p className="text-sm text-[#8B7D6E] dark:text-[#B0A090] mt-2 text-center">Thiết lập nhịp thở theo ý bạn</p>
         </button>
+      </div>
+
+      {/* Utilities Section */}
+      <div className="mt-16 mb-8 text-center sm:text-left">
+        <h2 className="text-xl font-medium text-[#4A3C31] dark:text-[#F5EDE0] mb-6 flex items-center justify-center sm:justify-start gap-2">
+          <Zap className="w-5 h-5 text-[#A37B5C]" />
+          Tiện ích bổ trợ
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <button
+            onClick={onTempleTools}
+            className="flex flex-col items-center p-5 bg-white/40 dark:bg-white/5 backdrop-blur-sm border border-[#E8DFC9] dark:border-white/10 rounded-2xl hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group"
+          >
+            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
+              <Bell className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
+            </div>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Chuông Mõ</span>
+          </button>
+          
+          <button
+            onClick={onMala}
+            className="flex flex-col items-center p-5 bg-white/40 dark:bg-white/5 backdrop-blur-sm border border-[#E8DFC9] dark:border-white/10 rounded-2xl hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group"
+          >
+            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
+              <Disc className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
+            </div>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Lần Chuỗi Hạt</span>
+          </button>
+
+          <button
+            onClick={onJournal}
+            className="flex flex-col items-center p-5 bg-white/40 dark:bg-white/5 backdrop-blur-sm border border-[#E8DFC9] dark:border-white/10 rounded-2xl hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group"
+          >
+            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
+              <MessageSquare className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
+            </div>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Nhật Ký</span>
+          </button>
+          
+          <button
+            onClick={onStats}
+            className="flex flex-col items-center p-5 bg-white/40 dark:bg-white/5 backdrop-blur-sm border border-[#E8DFC9] dark:border-white/10 rounded-2xl hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group"
+          >
+            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
+              <BarChart3 className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
+            </div>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Thành Tựu</span>
+          </button>
+        </div>
       </div>
 
       {/* PWA Install hint */}

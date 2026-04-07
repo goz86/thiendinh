@@ -4,10 +4,14 @@ import { Visualizer } from './components/Visualizer';
 import { CustomForm } from './components/CustomForm';
 import { Stats } from './components/Stats';
 import { Auth } from './components/Auth';
+import { AdminDashboard } from './components/AdminDashboard';
+import { MalaCounter } from './components/MalaCounter';
+import { TempleTools } from './components/TempleTools';
+import { Journal } from './components/Journal';
 import { supabase } from './lib/supabase';
 import type { BreathingTechnique } from './types';
 
-type View = 'library' | 'custom' | 'visualizer' | 'stats' | 'auth';
+type View = 'library' | 'custom' | 'visualizer' | 'stats' | 'auth' | 'admin' | 'mala' | 'temple_tools' | 'journal';
 
 function App() {
   const [view, setView] = useState<View>('library');
@@ -46,10 +50,31 @@ function App() {
     return () => subscription.unsubscribe();
   }, [view]);
 
-  // Register Service Worker for PWA
+  // Register Service Worker for PWA with auto-update logic
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      navigator.serviceWorker.register('/sw.js').then(registration => {
+        // Kiểm tra cập nhật định kỳ (mỗi 1 giờ)
+        setInterval(() => {
+          registration.update();
+        }, 60 * 60 * 1000);
+
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                // Có bản cập nhật mới, thông báo và tự động reload
+                console.log('Phát hiện bản cập nhật mới, đang làm mới ứng dụng...');
+                newWorker.postMessage({ type: 'SKIP_WAITING' });
+                window.location.reload();
+              }
+            });
+          }
+        });
+      }).catch(err => {
+        console.error('Lỗi đăng ký Service Worker:', err);
+      });
     }
   }, []);
 
@@ -74,7 +99,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen transition-colors duration-500 text-[#5A4D41] dark:text-[#F5EDE0] bg-[#FCF9F3] dark:bg-[#0d0b09]">
+    <div className="min-h-screen transition-colors duration-500 text-[#5A4D41] dark:text-[#F5EDE0] bg-transparent">
       {view === 'visualizer' && activeTechnique ? (
         <Visualizer
           technique={activeTechnique}
@@ -94,6 +119,18 @@ function App() {
         <Stats
           onBack={() => setView('library')}
         />
+      ) : view === 'journal' ? (
+        <Journal
+          onBack={() => setView('library')}
+        />
+      ) : view === 'admin' ? (
+        <AdminDashboard
+          onBack={() => setView('library')}
+        />
+      ) : view === 'mala' ? (
+        <MalaCounter onBack={handleClose} />
+      ) : view === 'temple_tools' ? (
+        <TempleTools onBack={handleClose} />
       ) : (
         <Library
           onSelect={handleSelect}
@@ -101,6 +138,10 @@ function App() {
           onStats={() => setView('stats')}
           onAuth={() => setView('auth')}
           onLogout={handleLogout}
+          onAdmin={() => setView('admin')}
+          onMala={() => setView('mala')}
+          onTempleTools={() => setView('temple_tools')}
+          onJournal={() => setView('journal')}
           user={user}
           darkMode={darkMode}
           onToggleDark={() => setDarkMode(!darkMode)}

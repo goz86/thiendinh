@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, X, Volume2, VolumeX, ArrowLeft, Music, Maximize, Minimize, Mic, MicOff, Timer, RefreshCw } from 'lucide-react';
-import type { BreathingTechnique } from '../types';
-import { addSession } from '../utils/storage';
+import { Settings, X, Volume2, VolumeX, ArrowLeft, Music, Maximize, Minimize, Mic, MicOff, Timer, RefreshCw, Sparkles, Flower, Wind, Send } from 'lucide-react';
+import type { BreathingTechnique, VisualMode, Mood } from '../types';
+import { addSession, addJournalEntry } from '../utils/storage';
 import { supabase } from '../lib/supabase';
 
 interface VisualizerProps {
@@ -19,6 +19,42 @@ const phaseText: Record<Phase, string> = {
   exhale: 'Thở ra',
   hold2: 'Giữ hơi'
 };
+
+// Simple Error Boundary for the Visualizer
+class VisualizerErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#FCF9F3] dark:bg-[#0d0b09] p-8 text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+            <X className="w-8 h-8 text-red-500" />
+          </div>
+          <h2 className="text-xl font-bold text-[#4A3C31] dark:text-[#F5EDE0] mb-2">Đã có lỗi xảy ra</h2>
+          <p className="text-[#8B7D6E] dark:text-[#DECAA4] mb-6 max-w-xs mx-auto">
+            Không thể khởi động buổi thiền. Điều này có thể do dữ liệu kỹ thuật thở bị thiếu hoặc sai định dạng.
+          </p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 bg-[#5A4D41] text-white rounded-full font-medium"
+          >
+            Tải lại ứng dụng
+          </button>
+          <div className="mt-8 text-[10px] text-red-400 font-mono opacity-50 overflow-hidden max-w-full italic">
+            {this.state.error?.toString()}
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const cosmicColors = [
   '#A37B5C', '#C2A385', '#8BA6B8', '#A195AD', '#DECAA4', '#B4C5D4',
@@ -79,10 +115,21 @@ const generateParticles = (count: number, minRadius: number, maxRadius: number) 
 };
 
 export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) => {
+  // 1. Critical Pattern Sanitization (must happen before any hooks or render logic)
+  const safePattern = useMemo(() => {
+    const p = { ...(technique?.pattern || { inhale: 4, hold1: 0, exhale: 4, hold2: 0 }) };
+    return {
+      inhale: Number(p.inhale) || 4,
+      hold1: Number(p.hold1) || 0,
+      exhale: Number(p.exhale) || 4,
+      hold2: Number(p.hold2) || 0
+    };
+  }, [technique]);
+
   const [appState, setAppState] = useState<AppState>('idle');
   const [countdownValue, setCountdownValue] = useState(3);
   const [phase, setPhase] = useState<Phase>('inhale');
-  const [timeLeft, setTimeLeft] = useState(technique.pattern.inhale);
+  const [timeLeft, setTimeLeft] = useState(safePattern.inhale);
   const [sessionTime, setSessionTime] = useState(0);
   
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -96,6 +143,11 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [showMusicPicker, setShowMusicPicker] = useState(false);
   const [customMusicList, setCustomMusicList] = useState<{id: string, label: string}[]>([]);
+  const [bgVolume, setBgVolume] = useState(0.5);
+  const [visualMode, setVisualMode] = useState<VisualMode>('cosmic');
+  const [showJournalInput, setShowJournalInput] = useState(false);
+  const [sessionMood, setSessionMood] = useState<Mood>('peaceful');
+  const [sessionNote, setSessionNote] = useState('');
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const bgAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -109,7 +161,6 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
   const inhaleAudioRef = useRef<HTMLAudioElement | null>(null);
   const exhaleAudioRef = useRef<HTMLAudioElement | null>(null);
   const holdAudioRef = useRef<HTMLAudioElement | null>(null);
-  const finishAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const layer1 = useMemo(() => generateParticles(100, 60, 300), []);
   const layer2 = useMemo(() => generateParticles(80, 100, 450), []);
@@ -117,15 +168,25 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
 
   const isActive = appState === 'breathing';
 
-  // Audio initialization is now handled in JSX for better browser compatibility
+  // Audio initialization and pattern sanitization
   useEffect(() => {
     // Volume control for pre-loaded refs
     if (audioRef.current) audioRef.current.volume = 0.5;
-    if (finishAudioRef.current) finishAudioRef.current.volume = 0.7;
     if (inhaleAudioRef.current) inhaleAudioRef.current.volume = 0.9;
     if (exhaleAudioRef.current) exhaleAudioRef.current.volume = 0.9;
     if (holdAudioRef.current) holdAudioRef.current.volume = 0.9;
-  }, []);
+
+    // Safety check for technique pattern
+    if (!technique.pattern.inhale || isNaN(technique.pattern.inhale)) technique.pattern.inhale = 4;
+    if (technique.pattern.hold1 === undefined || isNaN(technique.pattern.hold1)) technique.pattern.hold1 = 0;
+    if (!technique.pattern.exhale || isNaN(technique.pattern.exhale)) technique.pattern.exhale = 4;
+    if (technique.pattern.hold2 === undefined || isNaN(technique.pattern.hold2)) technique.pattern.hold2 = 0;
+    
+    // Ensure timeLeft starts correctly
+    if (appState === 'idle') {
+      setTimeLeft(safePattern.inhale);
+    }
+  }, [technique, appState]);
 
   const stopOscillator = useCallback(() => {
     if (oscillatorRef.current && gainNodeRef.current && audioContextRef.current) {
@@ -159,7 +220,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
     osc.frequency.setValueAtTime(freq, ctx.currentTime);
     
     gain.gain.setValueAtTime(0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 1); // Soft fade in
+    gain.gain.linearRampToValueAtTime(bgVolume * 0.15, ctx.currentTime + 1); // Soft fade in, proportional to bgVolume
     
     osc.connect(gain);
     gain.connect(ctx.destination);
@@ -193,6 +254,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
     } else {
       stopOscillator();
       setupAudio(bgMusic);
+      if (bgAudioRef.current) bgAudioRef.current.volume = bgVolume;
       if (isActive) {
         bgAudioRef.current?.play().catch(() => {});
       } else {
@@ -200,6 +262,16 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
       }
     }
   }, [bgMusic, isActive, playOscillator, stopOscillator]);
+
+  // Sync volume to audio element and oscillator
+  useEffect(() => {
+    if (bgAudioRef.current) {
+      bgAudioRef.current.volume = bgVolume;
+    }
+    if (gainNodeRef.current && audioContextRef.current) {
+      gainNodeRef.current.gain.setTargetAtTime(bgVolume * 0.15, audioContextRef.current.currentTime, 0.1);
+    }
+  }, [bgVolume]);
 
   // Overall cleanup on unmount
   useEffect(() => {
@@ -230,15 +302,74 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
 
   const playChime = useCallback(() => {
     if (soundEnabled && audioRef.current) {
-      // Ensure volume is set each time
       audioRef.current.volume = 0.5;
       audioRef.current.currentTime = 0;
       const playPromise = audioRef.current.play();
-      
       if (playPromise !== undefined) {
         playPromise.catch(error => {
           console.error("Lỗi phát tiếng chuông:", error);
         });
+      }
+    }
+  }, [soundEnabled]);
+
+  // Synthesized singing bowl / gong for finish
+  const playFinishGong = useCallback(() => {
+    if (!soundEnabled) return;
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const now = ctx.currentTime;
+
+      // Create multiple harmonics for a rich singing bowl tone
+      const frequencies = [261.6, 523.3, 784.9, 1046.5]; // C4, C5, G5, C6
+      const gains = [0.4, 0.25, 0.15, 0.08];
+      const durations = [4, 3.5, 3, 2.5];
+
+      frequencies.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
+        // Slight detune for warmth
+        osc.detune.setValueAtTime(Math.random() * 6 - 3, now);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(gains[i], now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + durations[i]);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + durations[i]);
+      });
+
+      // Add a soft metallic "ting" attack
+      const noise = ctx.createBufferSource();
+      const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
+      const noiseData = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < noiseData.length; i++) {
+        noiseData[i] = (Math.random() * 2 - 1) * 0.3;
+      }
+      noise.buffer = noiseBuffer;
+      const noiseGain = ctx.createGain();
+      const noiseFilter = ctx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.setValueAtTime(3000, now);
+      noiseFilter.Q.setValueAtTime(5, now);
+      noiseGain.gain.setValueAtTime(0.15, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noise.start(now);
+
+      // Clean up context after all sounds finish
+      setTimeout(() => ctx.close(), 5000);
+    } catch (e) {
+      console.error('Lỗi phát tiếng gong:', e);
+      // Fallback to regular chime
+      if (audioRef.current) {
+        audioRef.current.volume = 0.8;
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(() => {});
       }
     }
   }, [soundEnabled]);
@@ -294,17 +425,17 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
         } else {
           let nextPhase: Phase = 'inhale';
           if (currentPhase === 'inhale') {
-            nextPhase = technique.pattern.hold1 > 0 ? 'hold1' : 'exhale';
+            nextPhase = safePattern.hold1 > 0 ? 'hold1' : 'exhale';
           } else if (currentPhase === 'hold1') {
             nextPhase = 'exhale';
           } else if (currentPhase === 'exhale') {
-            nextPhase = technique.pattern.hold2 > 0 ? 'hold2' : 'inhale';
+            nextPhase = safePattern.hold2 > 0 ? 'hold2' : 'inhale';
           } else if (currentPhase === 'hold2') {
             nextPhase = 'inhale';
           }
 
           currentPhase = nextPhase;
-          currentTime = technique.pattern[nextPhase];
+          currentTime = safePattern[nextPhase];
           setPhase(nextPhase);
           setTimeLeft(currentTime);
           playChime();
@@ -313,7 +444,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [isActive, phase, timeLeft, technique, playChime, speakPhase]);
+  }, [isActive, phase, timeLeft, safePattern, playChime, speakPhase]);
 
   const handleStart = () => {
     // Unlock Audio Context and Audio elements on first user interaction
@@ -321,13 +452,6 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
       audioRef.current.play().then(() => {
         audioRef.current?.pause();
         if (audioRef.current) audioRef.current.currentTime = 0;
-      }).catch(() => {});
-    }
-
-    if (finishAudioRef.current) {
-      finishAudioRef.current.play().then(() => {
-        finishAudioRef.current?.pause();
-        if (finishAudioRef.current) finishAudioRef.current.currentTime = 0;
       }).catch(() => {});
     }
 
@@ -350,11 +474,27 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
   const handleFinish = () => {
     setAppState('idle');
     if (sessionTime > 0) {
-      addSession({
+      setShowJournalInput(true);
+      
+      // Play finish gong sound
+      setTimeout(() => playFinishGong(), 100);
+    }
+  };
+
+  const saveJournalAndClose = () => {
+    if (sessionTime > 0) {
+      const sessionId = addSession({
         date: new Date().toISOString().split('T')[0],
         techniqueId: technique.id,
         techniqueName: technique.name,
         durationSeconds: sessionTime,
+      });
+
+      addJournalEntry({
+        date: new Date().toISOString().split('T')[0],
+        mood: sessionMood,
+        note: sessionNote,
+        sessionId
       });
 
       // Save to Supabase if logged in
@@ -371,27 +511,12 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
       };
       saveToCloud();
       
-      // Play a stronger finish sound (Gong)
-      // Small timeout ensures it plays AFTER the state change is handled
-      setTimeout(() => {
-        if (soundEnabled && finishAudioRef.current) {
-          console.log("Hết giờ - Đang phát tiếng Gong");
-          finishAudioRef.current.volume = 1.0; // Max volume for gong
-          finishAudioRef.current.currentTime = 0;
-          finishAudioRef.current.play().catch(e => {
-            console.error("Lỗi phát âm thanh kết thúc:", e);
-            // Fallback to regular chime
-            if (audioRef.current) {
-              audioRef.current.volume = 0.8;
-              audioRef.current.currentTime = 0;
-              audioRef.current.play().catch(() => {});
-            }
-          });
-        }
-      }, 100);
-      
-      // Auto-reset timer
+      // Reset and close
       setSessionTime(0);
+      setShowJournalInput(false);
+      onClose();
+    } else {
+      onClose();
     }
   };
 
@@ -437,17 +562,23 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
   const getScale = (multiplier: number = 1) => {
     if (!isActive) return 1;
     let target = 1;
-    if (reverseAnimation) {
-      target = phase === 'inhale' || phase === 'hold1' ? 0.4 : 1.7;
+    const isReversed = reverseAnimation;
+    const currentPhase = phase || 'inhale';
+    
+    if (isReversed) {
+      target = currentPhase === 'inhale' || currentPhase === 'hold1' ? 0.4 : 1.7;
     } else {
-      target = phase === 'inhale' || phase === 'hold1' ? 1.7 : 0.4;
+      target = currentPhase === 'inhale' || currentPhase === 'hold1' ? 1.7 : 0.4;
     }
-    return 1 + (target - 1) * multiplier;
+    
+    const scale = 1 + (target - 1) * (multiplier || 1);
+    return isNaN(scale) ? 1 : scale;
   };
 
   const getDuration = () => {
     if (!isActive) return 1;
-    return technique.pattern[phase];
+    const dur = safePattern[phase] || 1;
+    return isNaN(dur) || dur <= 0.1 ? 1 : dur;
   };
 
   const renderParticles = (particles: typeof layer1) => {
@@ -465,6 +596,86 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
         }}
       />
     ));
+  };
+
+  const renderSacredGeometry = () => {
+    const scale = getScale(0.6);
+    const duration = getDuration();
+    return (
+      <svg className="w-[300px] h-[300px] sm:w-[500px] sm:h-[500px] transition-transform duration-500" viewBox="0 0 200 200">
+        <defs>
+          <linearGradient id="mandala-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#DECAA4" />
+            <stop offset="100%" stopColor="#A37B5C" />
+          </linearGradient>
+        </defs>
+        <motion.g
+          animate={{ rotate: 360 }}
+          transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
+          style={{ originX: "100px", originY: "100px" }}
+        >
+          {Array.from({ length: 6 }).map((_, i) => (
+            <motion.circle
+              key={i}
+              cx="100"
+              cy="100"
+              r={20 + i * 12}
+              fill="none"
+              stroke="url(#mandala-grad)"
+              strokeWidth="0.5"
+              strokeDasharray="4 2"
+              animate={{ 
+                scale: 0.8 + (scale - 1) * (1 - i * 0.1),
+                opacity: 0.3 + (1 - i * 0.1) * 0.4
+              }}
+              transition={{ duration, ease: "easeInOut" }}
+            />
+          ))}
+          {Array.from({ length: 8 }).map((_, i) => (
+            <motion.path
+              key={`petal-${i}`}
+              d="M100 100 Q120 60 140 100 T100 140 Q80 100 60 60 T100 100"
+              fill="none"
+              stroke="url(#mandala-grad)"
+              strokeWidth="0.8"
+              style={{ originX: "100px", originY: "100px" }}
+              animate={{ 
+                rotate: i * 45,
+                scale: 0.5 + scale * 0.5
+              }}
+              transition={{ duration, ease: "easeInOut" }}
+            />
+          ))}
+        </motion.g>
+      </svg>
+    );
+  };
+
+  const renderZenGarden = () => {
+    const scale = getScale(1);
+    const duration = getDuration();
+    return (
+      <div className="relative w-[300px] h-[300px] sm:w-[500px] sm:h-[500px] flex items-center justify-center">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute rounded-full border border-[#C2A385]/30"
+            initial={{ width: 0, height: 0, opacity: 0 }}
+            animate={{ 
+              width: (i + 1) * 80 * scale,
+              height: (i + 1) * 80 * scale,
+              opacity: (1 - i * 0.2) * (phase === 'inhale' ? 0.8 : 0.3)
+            }}
+            transition={{ duration, ease: "easeInOut" }}
+          />
+        ))}
+        <motion.div
+          className="w-16 h-16 bg-[#A37B5C] rounded-full shadow-2xl"
+          animate={{ scale: 0.8 + scale * 0.4 }}
+          transition={{ duration, ease: "easeInOut" }}
+        />
+      </div>
+    );
   };
 
   const formatTime = (seconds: number) => {
@@ -485,7 +696,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
     const animate = () => {
       if (!progressRef.current) return;
       const elapsed = (Date.now() - phaseStartRef.current) / 1000;
-      const total = technique.pattern[phase];
+      const total = safePattern[phase];
       let pct = 0;
       if (phase === 'inhale') {
         pct = total > 0 ? Math.min((elapsed / total) * 100, 100) : 100;
@@ -493,13 +704,15 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
         pct = 100;
       } else if (phase === 'exhale') {
         pct = total > 0 ? Math.max((1 - elapsed / total) * 100, 0) : 0;
+      } else if (phase === 'hold2') {
+        pct = 0;
       }
       progressRef.current.style.width = `${pct}%`;
       rafRef.current = requestAnimationFrame(animate);
     };
     rafRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [isActive, phase, technique]);
+  }, [isActive, phase, safePattern]);
 
   const toggleZenMode = () => {
     if (!zenMode) {
@@ -510,10 +723,14 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
     setZenMode(!zenMode);
   };
 
+
   const remainingTime = targetDuration > 0 ? Math.max(0, targetDuration * 60 - sessionTime) : null;
 
   return (
-    <div className="absolute inset-0 bg-gradient-to-b from-[#FCF9F3]/80 to-[#FCF9F3]/95 dark:from-[#1a1612]/95 dark:to-[#0d0b09]/98 backdrop-blur-[3px] flex flex-col items-center justify-center z-50 overflow-hidden">
+    <VisualizerErrorBoundary>
+      <div 
+        className="absolute inset-0 bg-gradient-to-b from-[#FCF9F3]/80 to-[#FCF9F3]/95 dark:from-[#1a1612]/95 dark:to-[#0d0b09]/98 backdrop-blur-[3px] flex flex-col items-center justify-center z-50 overflow-hidden"
+      >
       
       {/* Header — hidden in zen mode */}
       <AnimatePresence>
@@ -525,7 +742,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
           >
             <div className="flex-1 flex justify-start mt-20 sm:mt-0">
               <button
-                onClick={() => { resetTimer(); onClose(); }}
+                onClick={onClose}
                 className="p-3 bg-white/50 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 shadow-sm rounded-full transition-all cursor-pointer border border-[#E8DFC9] dark:border-white/10"
               >
                 <ArrowLeft className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
@@ -536,22 +753,22 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
               <div className="text-center">
                 <h2 className="text-2xl font-semibold text-[#4A3C31] dark:text-[#F5EDE0] whitespace-nowrap">{technique.name}</h2>
                 <div className="flex space-x-2 text-base text-[#C2A385] font-mono mt-1 justify-center">
-                  <span className={phase === 'inhale' ? 'text-[#5A4D41] dark:text-[#F5EDE0] font-bold scale-110 transition-transform' : ''}>{technique.pattern.inhale}</span>-
-                  <span className={phase === 'hold1' ? 'text-[#5A4D41] dark:text-[#F5EDE0] font-bold scale-110 transition-transform' : ''}>{technique.pattern.hold1}</span>-
-                  <span className={phase === 'exhale' ? 'text-[#5A4D41] dark:text-[#F5EDE0] font-bold scale-110 transition-transform' : ''}>{technique.pattern.exhale}</span>-
-                  <span className={phase === 'hold2' ? 'text-[#5A4D41] dark:text-[#F5EDE0] font-bold scale-110 transition-transform' : ''}>{technique.pattern.hold2}</span>
+                  <span className={phase === 'inhale' ? 'text-[#5A4D41] dark:text-[#F5EDE0] font-bold scale-110 transition-transform' : ''}>{safePattern.inhale}</span>-
+                  <span className={phase === 'hold1' ? 'text-[#5A4D41] dark:text-[#F5EDE0] font-bold scale-110 transition-transform' : ''}>{safePattern.hold1}</span>-
+                  <span className={phase === 'exhale' ? 'text-[#5A4D41] dark:text-[#F5EDE0] font-bold scale-110 transition-transform' : ''}>{safePattern.exhale}</span>-
+                  <span className={phase === 'hold2' ? 'text-[#5A4D41] dark:text-[#F5EDE0] font-bold scale-110 transition-transform' : ''}>{safePattern.hold2}</span>
                 </div>
                 {/* Session time or remaining time */}
-                <div className={`mt-3 py-1.5 px-4 rounded-full border border-[#DECAA4]/50 dark:border-white/10 bg-white/40 dark:bg-white/5 shadow-sm transition-opacity duration-1000 ${(isActive || sessionTime > 0) ? 'opacity-100' : 'opacity-0'} pointer-events-auto`}>
-                  {remainingTime !== null ? (
+                <div className={`mt-3 py-1.5 px-4 rounded-full border border-[#DECAA4]/50 dark:border-white/10 bg-white/40 dark:bg-white/5 shadow-sm transition-opacity duration-1000 ${(isActive || (sessionTime || 0) > 0) ? 'opacity-100' : 'opacity-0'} pointer-events-auto`}>
+                  {(remainingTime || 0) !== null && !isNaN(remainingTime as number) ? (
                     <>
                       <span className="text-sm font-medium text-[#8B7D6E] dark:text-[#B0A090]">Còn lại: </span>
-                      <span className="text-[#A37B5C] dark:text-[#DECAA4] font-mono text-base ml-1">{formatTime(remainingTime)}</span>
+                      <span className="text-[#A37B5C] dark:text-[#DECAA4] font-mono text-base ml-1">{formatTime(remainingTime || 0)}</span>
                     </>
                   ) : (
                     <>
                       <span className="text-sm font-medium text-[#8B7D6E] dark:text-[#B0A090]">Thời gian: </span>
-                      <span className="text-[#A37B5C] dark:text-[#DECAA4] font-mono text-base ml-1">{formatTime(sessionTime)}</span>
+                      <span className="text-[#A37B5C] dark:text-[#DECAA4] font-mono text-base ml-1">{formatTime(sessionTime || 0)}</span>
                     </>
                   )}
                 </div>
@@ -624,6 +841,17 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
       <AnimatePresence>
         {showMusicPicker && (
           <motion.div
+            key="music-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-40"
+            onClick={() => setShowMusicPicker(false)}
+          />
+        )}
+        {showMusicPicker && (
+          <motion.div
+            key="music-panel"
             initial={{ opacity: 0, x: 20, scale: 0.9 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 20, scale: 0.9 }}
@@ -653,6 +881,29 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
                 </button>
               ))}
             </div>
+            
+            {/* Volume Slider */}
+            {bgMusic !== 'none' && (
+              <div className="mt-3 pt-3 border-t border-[#F2EAE0] dark:border-white/10">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Volume2 className="w-3.5 h-3.5 text-[#A37B5C] dark:text-[#DECAA4] flex-shrink-0" />
+                  <span className="text-xs text-[#8B7D6E] dark:text-[#B0A090]">Âm lượng</span>
+                  <span className="text-xs text-[#A37B5C] dark:text-[#DECAA4] ml-auto font-mono">{Math.round(bgVolume * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={bgVolume}
+                  onChange={(e) => setBgVolume(parseFloat(e.target.value))}
+                  className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+                  style={{
+                    background: `linear-gradient(to right, #A37B5C ${bgVolume * 100}%, #E8DFC9 ${bgVolume * 100}%)`
+                  }}
+                />
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -661,6 +912,17 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
       <AnimatePresence>
         {showSettings && (
           <motion.div
+            key="settings-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-40"
+            onClick={() => setShowSettings(false)}
+          />
+        )}
+        {showSettings && (
+          <motion.div
+            key="settings-panel"
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
@@ -735,6 +997,59 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
                   </div>
                 )}
               </div>
+
+              {/* Visual Mode Selector */}
+              <div className="flex flex-col gap-2 pt-1 border-t border-[#F2EAE0] dark:border-white/10 mt-1">
+                <span className="text-[15px] font-medium text-[#5A4D41] dark:text-[#F5EDE0] flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-[#A37B5C] dark:text-[#DECAA4]"/>
+                  Chế độ hiển thị
+                </span>
+                <div className="flex gap-2">
+                  {[
+                    { id: 'cosmic', icon: Sparkles, label: 'Vũ trụ' },
+                    { id: 'sacred', icon: Flower, label: 'Mantra' },
+                    { id: 'garden', icon: Wind, label: 'Vườn Thiền' }
+                  ].map(mode => (
+                    <button
+                      key={mode.id}
+                      onClick={() => setVisualMode(mode.id as VisualMode)}
+                      className={`flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs cursor-pointer transition-all ${
+                        visualMode === mode.id
+                          ? 'bg-[#5A4D41] text-white shadow-md shadow-[#5A4D41]/20'
+                          : 'bg-[#FCF9F3] dark:bg-white/5 border border-[#E8DFC9] dark:border-white/10 text-[#5A4D41] dark:text-[#DECAA4] hover:bg-white dark:hover:bg-white/10'
+                      }`}
+                    >
+                      <mode.icon className="w-4 h-4" />
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Background Music Volume */}
+              {bgMusic !== 'none' && (
+                <div className="flex flex-col gap-3 pt-1 border-t border-[#F2EAE0] dark:border-white/10 mt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[15px] text-[#5A4D41] dark:text-[#F5EDE0] flex items-center gap-2 font-medium">
+                      <Music className="w-5 h-5 text-[#A37B5C]"/>
+                      Âm lượng nhạc
+                    </span>
+                    <span className="text-sm font-mono text-[#A37B5C] dark:text-[#DECAA4]">{Math.round((bgVolume || 0) * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={bgVolume || 0}
+                    onChange={(e) => setBgVolume(parseFloat(e.target.value) || 0)}
+                    className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-[#E8DFC9] dark:bg-white/10 accent-[#A37B5C]"
+                    style={{
+                      background: `linear-gradient(to right, #A37B5C ${(bgVolume || 0) * 100}%, #E8DFC9 ${(bgVolume || 0) * 100}%)`
+                    }}
+                  />
+                </div>
+              )}
 
               {/* Chime toggle */}
               <div className="flex items-center justify-between">
@@ -825,56 +1140,74 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
         )}
       </AnimatePresence>
 
-      {/* Cosmic Vortex Layers */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 w-full h-full opacity-90">
-        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 120, ease: "linear" }} className="absolute flex items-center justify-center">
-          <motion.div animate={{ scale: getScale(0.8) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
-            {renderParticles(layer1)}
+
+      {/* Core breathing orb area */}
+      <div className="relative flex items-center justify-center w-full h-[400px] sm:h-[500px] z-20 mt-12 bg-transparent">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={visualMode}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.1 }}
+            transition={{ duration: 0.8 }}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            {visualMode === 'cosmic' && (
+              <div className="relative flex items-center justify-center w-[300px] h-[300px]">
+                {/* Cosmic Vortex Layers */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 w-full h-full opacity-90">
+                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 120, ease: "linear" }} className="absolute flex items-center justify-center">
+                    <motion.div animate={{ scale: getScale(0.8) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
+                      {renderParticles(layer1)}
+                    </motion.div>
+                  </motion.div>
+
+                  <motion.div animate={{ rotate: -360 }} transition={{ repeat: Infinity, duration: 180, ease: "linear" }} className="absolute flex items-center justify-center">
+                    <motion.div animate={{ scale: getScale(1.1) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
+                      {renderParticles(layer2)}
+                    </motion.div>
+                  </motion.div>
+
+                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 250, ease: "linear" }} className="absolute flex items-center justify-center">
+                    <motion.div animate={{ scale: getScale(1.4) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
+                      {renderParticles(layer3)}
+                    </motion.div>
+                  </motion.div>
+
+                  {/* Glow rings that pulse with breathing */}
+                  {isActive && (
+                    <>
+                      <motion.div
+                        animate={{ scale: getScale(0.6), opacity: [0.1, 0.25, 0.1] }}
+                        transition={{ duration: getDuration(), ease: "easeInOut", opacity: { repeat: Infinity, duration: 3 } }}
+                        className="absolute w-[400px] h-[400px] rounded-full border border-[#DECAA4]/20 dark:border-[#DECAA4]/10"
+                      />
+                      <motion.div
+                        animate={{ scale: getScale(0.9), opacity: [0.05, 0.15, 0.05] }}
+                        transition={{ duration: getDuration(), ease: "easeInOut", opacity: { repeat: Infinity, duration: 4 } }}
+                        className="absolute w-[550px] h-[550px] rounded-full border border-[#8BA6B8]/15 dark:border-[#8BA6B8]/10"
+                      />
+                    </>
+                  )}
+                </div>
+                <motion.div
+                  animate={{ scale: getScale(1.2) }}
+                  transition={{ duration: getDuration(), ease: "easeInOut" }}
+                  className="absolute w-40 h-40 rounded-full opacity-30 filter blur-3xl bg-[#C2A385] mix-blend-multiply dark:mix-blend-screen"
+                />
+                
+                <motion.div
+                  animate={{ scale: getScale(0.5) }}
+                  transition={{ duration: getDuration(), ease: "easeInOut" }}
+                  className="absolute w-56 h-56 rounded-full opacity-[0.85] backdrop-blur-[2px] border border-white/60 dark:border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.7)] dark:shadow-[0_0_50px_rgba(222,202,164,0.15)] bg-gradient-to-tr from-[#DECAA4]/20 to-[#FCF9F3]/80 dark:from-[#3a3028]/60 dark:to-[#2a2420]/80 flex items-center justify-center overflow-hidden"
+                />
+              </div>
+            )}
+
+            {visualMode === 'sacred' && renderSacredGeometry()}
+            {visualMode === 'garden' && renderZenGarden()}
           </motion.div>
-        </motion.div>
-
-        <motion.div animate={{ rotate: -360 }} transition={{ repeat: Infinity, duration: 180, ease: "linear" }} className="absolute flex items-center justify-center">
-          <motion.div animate={{ scale: getScale(1.1) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
-            {renderParticles(layer2)}
-          </motion.div>
-        </motion.div>
-
-        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 250, ease: "linear" }} className="absolute flex items-center justify-center">
-          <motion.div animate={{ scale: getScale(1.4) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
-            {renderParticles(layer3)}
-          </motion.div>
-        </motion.div>
-
-        {/* Glow rings that pulse with breathing */}
-        {isActive && (
-          <>
-            <motion.div
-              animate={{ scale: getScale(0.6), opacity: [0.1, 0.25, 0.1] }}
-              transition={{ duration: getDuration(), ease: "easeInOut", opacity: { repeat: Infinity, duration: 3 } }}
-              className="absolute w-[400px] h-[400px] rounded-full border border-[#DECAA4]/20 dark:border-[#DECAA4]/10"
-            />
-            <motion.div
-              animate={{ scale: getScale(0.9), opacity: [0.05, 0.15, 0.05] }}
-              transition={{ duration: getDuration(), ease: "easeInOut", opacity: { repeat: Infinity, duration: 4 } }}
-              className="absolute w-[550px] h-[550px] rounded-full border border-[#8BA6B8]/15 dark:border-[#8BA6B8]/10"
-            />
-          </>
-        )}
-      </div>
-
-      {/* Core breathing orb */}
-      <div className="relative flex items-center justify-center w-[300px] h-[300px] z-20 mt-12 bg-transparent">
-        <motion.div
-          animate={{ scale: getScale(1.2) }}
-          transition={{ duration: getDuration(), ease: "easeInOut" }}
-          className="absolute w-40 h-40 rounded-full opacity-30 filter blur-3xl bg-[#C2A385] mix-blend-multiply dark:mix-blend-screen"
-        />
-        
-        <motion.div
-          animate={{ scale: getScale(0.5) }}
-          transition={{ duration: getDuration(), ease: "easeInOut" }}
-          className="absolute w-56 h-56 rounded-full opacity-[0.85] backdrop-blur-[2px] border border-white/60 dark:border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.7)] dark:shadow-[0_0_50px_rgba(222,202,164,0.15)] bg-gradient-to-tr from-[#DECAA4]/20 to-[#FCF9F3]/80 dark:from-[#3a3028]/60 dark:to-[#2a2420]/80 flex items-center justify-center overflow-hidden"
-        />
+        </AnimatePresence>
 
         {/* Center text */}
         <div className="absolute flex flex-col items-center justify-center pointer-events-none drop-shadow-sm z-30">
@@ -888,16 +1221,16 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
                 className="flex flex-col items-center"
               >
                 <span className="text-sm font-medium text-[#8B7D6E] dark:text-[#B0A090] mb-2">Chuẩn bị</span>
-                <motion.span
-                  key={countdownValue}
-                  initial={{ scale: 0.3, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 2, opacity: 0 }}
-                  transition={{ duration: 0.5 }}
-                  className="text-8xl font-light font-mono text-[#5A4D41] dark:text-[#F5EDE0]"
-                >
-                  {countdownValue}
-                </motion.span>
+                  <motion.span
+                    key={countdownValue}
+                    initial={{ scale: 0.3, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 2, opacity: 0 }}
+                    transition={{ duration: 0.5 }}
+                    className="text-8xl font-light font-mono text-[#5A4D41] dark:text-[#F5EDE0]"
+                  >
+                    {countdownValue || 0}
+                  </motion.span>
               </motion.div>
             ) : isActive ? (
               <motion.div key="breathing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center">
@@ -909,7 +1242,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
                 >
                   {phaseText[phase]}
                 </motion.span>
-                <span className="text-8xl font-light mt-1 font-mono text-[#5A4D41] dark:text-[#F5EDE0]">{timeLeft}</span>
+                <span className="text-8xl font-light mt-1 font-mono text-[#5A4D41] dark:text-[#F5EDE0]">{timeLeft || 0}</span>
               </motion.div>
             ) : (
               <motion.span
@@ -937,7 +1270,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
           </div>
           <div className="flex justify-between mt-2 text-xs transition-opacity duration-500">
             <span className={`transition-colors ${phase === 'inhale' ? 'text-[#5A4D41] dark:text-[#F5EDE0] font-semibold' : 'text-[#C2A385]'}`}>Hít vào</span>
-            {(technique.pattern.hold1 > 0 || technique.pattern.hold2 > 0) && (
+            {(safePattern.hold1 > 0 || safePattern.hold2 > 0) && (
               <span className={`transition-colors ${(phase === 'hold1' || phase === 'hold2') ? 'text-[#5A4D41] dark:text-[#F5EDE0] font-semibold' : 'text-[#C2A385]'}`}>Giữ hơi</span>
             )}
             <span className={`transition-colors ${phase === 'exhale' ? 'text-[#5A4D41] dark:text-[#F5EDE0] font-semibold' : 'text-[#C2A385]'}`}>Thở ra</span>
@@ -950,13 +1283,13 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
         <button
           onClick={toggleTimer}
           disabled={appState === 'countdown'}
-          className="px-8 sm:px-12 py-4 bg-[#5A4D41] text-white rounded-full font-medium hover:bg-[#4A3C31] transition-all shadow-[0_8px_20px_rgba(90,77,65,0.2)] hover:shadow-[0_10px_25px_rgba(90,77,65,0.3)] hover:-translate-y-1 cursor-pointer text-lg border border-[#4A3C31] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          className="flex-1 max-w-[160px] sm:max-w-[200px] flex justify-center items-center py-4 bg-[#5A4D41] text-white rounded-full font-medium hover:bg-[#4A3C31] transition-all shadow-[0_8px_20px_rgba(90,77,65,0.2)] hover:shadow-[0_10px_25px_rgba(90,77,65,0.3)] hover:-translate-y-1 cursor-pointer text-lg border border-[#4A3C31] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
         >
           {appState === 'countdown' ? 'Đang chuẩn bị...' : isActive ? 'Tạm Dừng' : (sessionTime > 0 ? 'Tiếp Tục' : 'Bắt Đầu')}
         </button>
         <button
           onClick={resetTimer}
-          className={`px-6 sm:px-10 py-4 bg-white/70 dark:bg-white/10 backdrop-blur-[2px] text-[#5A4D41] dark:text-[#DECAA4] border border-[#DECAA4] dark:border-white/10 rounded-full font-medium hover:bg-[#FCF9F3] dark:hover:bg-white/20 transition-all shadow-sm hover:shadow-md cursor-pointer text-lg whitespace-nowrap ${
+          className={`flex-1 max-w-[160px] sm:max-w-[200px] flex justify-center items-center py-4 bg-white/70 dark:bg-white/10 backdrop-blur-[2px] text-[#5A4D41] dark:text-[#DECAA4] border border-[#DECAA4] dark:border-white/10 rounded-full font-medium hover:bg-[#FCF9F3] dark:hover:bg-white/20 transition-all shadow-sm hover:shadow-md cursor-pointer text-lg whitespace-nowrap ${
             sessionTime > 0 ? 'opacity-100 flex-shrink-0' : 'hidden opacity-0 pointer-events-none'
           }`}
         >
@@ -964,21 +1297,87 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
         </button>
       </div>
 
+      {/* Journal Entry Modal */}
+      <AnimatePresence>
+        {showJournalInput && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="bg-[#FCF9F3] dark:bg-[#1a1612] w-full max-w-md rounded-3xl p-6 shadow-2xl border border-[#E8DFC9] dark:border-white/10"
+            >
+              <div className="text-center mb-6">
+                <h3 className="text-xl font-semibold text-[#4A3C31] dark:text-[#F5EDE0]">Kết thúc buổi thiền</h3>
+                <p className="text-sm text-[#8B7D6E] dark:text-[#B0A090] mt-1">Hôm nay bạn cảm thấy thế nào?</p>
+              </div>
+
+              <div className="grid grid-cols-5 gap-2 mb-8">
+                {[
+                  { id: 'peaceful', label: 'Bình an', icon: '😇' },
+                  { id: 'calm', label: 'Tĩnh', icon: '😌' },
+                  { id: 'neutral', label: 'Ổn', icon: '😐' },
+                  { id: 'tired', label: 'Mệt', icon: '😴' },
+                  { id: 'anxious', label: 'Rối', icon: '😟' },
+                ].map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => setSessionMood(m.id as Mood)}
+                    className={`flex flex-col items-center gap-2 p-2 rounded-2xl transition-all cursor-pointer ${
+                      sessionMood === m.id ? 'bg-[#A37B5C]/20 scale-110' : 'hover:bg-[#A37B5C]/5'
+                    }`}
+                  >
+                    <span className="text-2xl">{m.icon}</span>
+                    <span className="text-[10px] text-[#4A3C31] dark:text-[#DECAA4] font-medium whitespace-nowrap">{m.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-[#4A3C31] dark:text-[#DECAA4] mb-2 px-1">Ghi chú (tùy chọn)</label>
+                <textarea
+                  value={sessionNote}
+                  onChange={(e) => setSessionNote(e.target.value)}
+                  placeholder="Những ý niệm hoặc cảm xúc chợt đến..."
+                  className="w-full h-32 bg-white/50 dark:bg-white/5 border border-[#DECAA4] dark:border-white/10 rounded-2xl p-4 text-sm text-[#4A3C31] dark:text-[#F5EDE0] focus:ring-2 focus:ring-[#A37B5C] outline-none resize-none transition-all"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowJournalInput(false); resetTimer(); onClose(); }}
+                  className="flex-1 py-4 rounded-2xl text-[#8B7D6E] font-medium hover:bg-[#A37B5C]/5 transition-all cursor-pointer"
+                >
+                  Bỏ qua
+                </button>
+                <button
+                  onClick={saveJournalAndClose}
+                  className="flex-[2] py-4 bg-[#A37B5C] text-white rounded-2xl font-medium shadow-lg shadow-[#A37B5C]/20 hover:bg-[#8B7D6E] transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Send className="w-4 h-4" />
+                  Lưu nhật ký
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Hidden Audio elements for better React/Browser integration */}
       <audio ref={bgAudioRef} loop />
       <audio 
         ref={audioRef} 
-        src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3" 
-        preload="auto" 
-      />
-      <audio 
-        ref={finishAudioRef} 
-        src="https://cdn.pixabay.com/audio/2022/03/15/audio_783d1a3356.mp3" 
+        src="https://cdn.pixabay.com/audio/2022/03/24/audio_731557008f.mp3" 
         preload="auto" 
       />
       <audio ref={inhaleAudioRef} src="/hit%20vao.mp3" preload="auto" />
       <audio ref={exhaleAudioRef} src="/tho%20ra.mp3" preload="auto" />
       <audio ref={holdAudioRef} src="/giu%20hoi%20tho.mp3" preload="auto" />
-    </div>
+      </div>
+    </VisualizerErrorBoundary>
   );
 };
