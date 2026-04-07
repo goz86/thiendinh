@@ -1,6 +1,6 @@
 import React from 'react';
 import { techniques } from '../data';
-import { Wind, Moon, Brain, ChevronRight, Plus, Heart, Zap, Leaf, Snowflake, Flame, CloudMoon, BarChart3, Sun, MoonIcon, User, Shield } from 'lucide-react';
+import { Wind, Moon, Brain, ChevronRight, Plus, Heart, Zap, Leaf, Snowflake, Flame, CloudMoon, BarChart3, Sun, MoonIcon, User, Shield, Volume2, RefreshCw } from 'lucide-react';
 import type { BreathingTechnique } from '../types';
 import { getDailyQuote } from '../data/quotes';
 import { getStats, syncWithCloud } from '../utils/storage';
@@ -13,6 +13,8 @@ interface LibraryProps {
   onAuth: () => void;
   onLogout: () => void;
   onAdmin: () => void;
+  onMala: () => void;
+  onTempleTools: () => void;
   user: any;
   darkMode: boolean;
   onToggleDark: () => void;
@@ -30,7 +32,7 @@ const iconMap: Record<string, React.ReactNode> = {
   sleep: <CloudMoon className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
 };
 
-export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, onAuth, onLogout, onAdmin, user, darkMode, onToggleDark }) => {
+export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, onAuth, onLogout, onAdmin, onMala, onTempleTools, user, darkMode, onToggleDark }) => {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = React.useState(false);
   const [stats, setStats] = React.useState(getStats());
   const quote = getDailyQuote();
@@ -166,6 +168,55 @@ export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, o
           <h3 className="text-lg font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Tạo Bài Tập Riêng</h3>
           <p className="text-sm text-[#8B7D6E] dark:text-[#B0A090] mt-2 text-center">Thiết lập nhịp thở theo ý bạn</p>
         </button>
+      </div>
+
+      {/* Utilities Section */}
+      <div className="mt-16 mb-8 text-center sm:text-left">
+        <h2 className="text-xl font-medium text-[#4A3C31] dark:text-[#F5EDE0] mb-6 flex items-center justify-center sm:justify-start gap-2">
+          <Zap className="w-5 h-5 text-[#A37B5C]" />
+          Tiện ích bổ trợ
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <button
+            onClick={onTempleTools}
+            className="flex flex-col items-center p-5 bg-white/40 dark:bg-white/5 backdrop-blur-sm border border-[#E8DFC9] dark:border-white/10 rounded-2xl hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group"
+          >
+            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
+              <Volume2 className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
+            </div>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Chuông Mõ</span>
+          </button>
+          
+          <button
+            onClick={onMala}
+            className="flex flex-col items-center p-5 bg-white/40 dark:bg-white/5 backdrop-blur-sm border border-[#E8DFC9] dark:border-white/10 rounded-2xl hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group"
+          >
+            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
+              <RefreshCw className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
+            </div>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Lần Chuỗi Hạt</span>
+          </button>
+
+          <button
+            disabled
+            className="flex flex-col items-center p-5 bg-white/20 dark:bg-white/[0.02] backdrop-blur-sm border border-[#E8DFC9]/50 dark:border-white/5 rounded-2xl opacity-50 cursor-not-allowed"
+          >
+            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3">
+              <Shield className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]/50" />
+            </div>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Nhật Ký</span>
+          </button>
+
+          <button
+            disabled
+            className="flex flex-col items-center p-5 bg-white/20 dark:bg-white/[0.02] backdrop-blur-sm border border-[#E8DFC9]/50 dark:border-white/5 rounded-2xl opacity-50 cursor-not-allowed"
+          >
+            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3">
+              <BarChart3 className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]/50" />
+            </div>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Biểu Đồ</span>
+          </button>
+        </div>
       </div>
 
       {/* PWA Install hint */}

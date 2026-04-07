@@ -5,10 +5,12 @@ import { CustomForm } from './components/CustomForm';
 import { Stats } from './components/Stats';
 import { Auth } from './components/Auth';
 import { AdminDashboard } from './components/AdminDashboard';
+import { MalaCounter } from './components/MalaCounter';
+import { TempleTools } from './components/TempleTools';
 import { supabase } from './lib/supabase';
 import type { BreathingTechnique } from './types';
 
-type View = 'library' | 'custom' | 'visualizer' | 'stats' | 'auth' | 'admin';
+type View = 'library' | 'custom' | 'visualizer' | 'stats' | 'auth' | 'admin' | 'mala' | 'temple_tools';
 
 function App() {
   const [view, setView] = useState<View>('library');
@@ -107,11 +109,15 @@ function App() {
           onAuth={() => setView('auth')}
           onLogout={handleLogout}
           onAdmin={() => setView('admin')}
+          onMala={() => setView('mala')}
+          onTempleTools={() => setView('temple_tools')}
           user={user}
           darkMode={darkMode}
           onToggleDark={() => setDarkMode(!darkMode)}
         />
       )}
+      {view === 'mala' && <MalaCounter onBack={() => setView('library')} />}
+      {view === 'temple_tools' && <TempleTools onBack={() => setView('library')} />}
     </div>
   );
 }
