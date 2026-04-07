@@ -67,7 +67,7 @@ export const MalaCounter: React.FC<MalaCounterProps> = ({ onBack }) => {
   return (
     <div className="fixed inset-0 bg-[#FCF9F3] dark:bg-[#0d0b09] z-50 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="p-6 flex items-center justify-between z-10">
+      <div className="p-6 flex items-center justify-between relative z-20">
         <button 
           onClick={onBack}
           className="p-3 bg-white/80 dark:bg-white/5 rounded-full shadow-sm cursor-pointer hover:bg-white transition-colors"

@@ -101,6 +101,10 @@ function App() {
         <AdminDashboard
           onBack={() => setView('library')}
         />
+      ) : view === 'mala' ? (
+        <MalaCounter onBack={handleClose} />
+      ) : view === 'temple_tools' ? (
+        <TempleTools onBack={handleClose} />
       ) : (
         <Library
           onSelect={handleSelect}
@@ -116,8 +120,6 @@ function App() {
           onToggleDark={() => setDarkMode(!darkMode)}
         />
       )}
-      {view === 'mala' && <MalaCounter onBack={() => setView('library')} />}
-      {view === 'temple_tools' && <TempleTools onBack={() => setView('library')} />}
     </div>
   );
 }

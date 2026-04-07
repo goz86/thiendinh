@@ -1,6 +1,6 @@
 import React from 'react';
 import { techniques } from '../data';
-import { Wind, Moon, Brain, ChevronRight, Plus, Heart, Zap, Leaf, Snowflake, Flame, CloudMoon, BarChart3, Sun, MoonIcon, User, Shield, Volume2, RefreshCw } from 'lucide-react';
+import { Wind, Moon, Brain, ChevronRight, Plus, Heart, Zap, Leaf, Snowflake, Flame, CloudMoon, BarChart3, Sun, MoonIcon, User, Shield, Bell, Disc } from 'lucide-react';
 import type { BreathingTechnique } from '../types';
 import { getDailyQuote } from '../data/quotes';
 import { getStats, syncWithCloud } from '../utils/storage';
@@ -182,7 +182,7 @@ export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, o
             className="flex flex-col items-center p-5 bg-white/40 dark:bg-white/5 backdrop-blur-sm border border-[#E8DFC9] dark:border-white/10 rounded-2xl hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group"
           >
             <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
-              <Volume2 className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
+              <Bell className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
             </div>
             <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Chuông Mõ</span>
           </button>
@@ -192,7 +192,7 @@ export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, o
             className="flex flex-col items-center p-5 bg-white/40 dark:bg-white/5 backdrop-blur-sm border border-[#E8DFC9] dark:border-white/10 rounded-2xl hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group"
           >
             <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
-              <RefreshCw className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
+              <Disc className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
             </div>
             <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Lần Chuỗi Hạt</span>
           </button>
