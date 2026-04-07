@@ -1,6 +1,6 @@
 import React from 'react';
 import { techniques } from '../data';
-import { Wind, Moon, Brain, ChevronRight, Plus, Heart, Zap, Leaf, Snowflake, Flame, CloudMoon, BarChart3, Sun, MoonIcon, User, Shield, Bell, Disc } from 'lucide-react';
+import { Wind, Moon, Brain, ChevronRight, Plus, Heart, Zap, Leaf, Snowflake, Flame, CloudMoon, BarChart3, Sun, MoonIcon, User, Shield, Bell, Disc, MessageSquare } from 'lucide-react';
 import type { BreathingTechnique } from '../types';
 import { getDailyQuote } from '../data/quotes';
 import { getStats, syncWithCloud } from '../utils/storage';
@@ -15,6 +15,7 @@ interface LibraryProps {
   onAdmin: () => void;
   onMala: () => void;
   onTempleTools: () => void;
+  onJournal: () => void;
   user: any;
   darkMode: boolean;
   onToggleDark: () => void;
@@ -32,7 +33,7 @@ const iconMap: Record<string, React.ReactNode> = {
   sleep: <CloudMoon className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
 };
 
-export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, onAuth, onLogout, onAdmin, onMala, onTempleTools, user, darkMode, onToggleDark }) => {
+export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, onAuth, onLogout, onAdmin, onMala, onTempleTools, onJournal, user, darkMode, onToggleDark }) => {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = React.useState(false);
   const [stats, setStats] = React.useState(getStats());
   const quote = getDailyQuote();
@@ -198,23 +199,23 @@ export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, o
           </button>
 
           <button
-            disabled
-            className="flex flex-col items-center p-5 bg-white/20 dark:bg-white/[0.02] backdrop-blur-sm border border-[#E8DFC9]/50 dark:border-white/5 rounded-2xl opacity-50 cursor-not-allowed"
+            onClick={onJournal}
+            className="flex flex-col items-center p-5 bg-white/40 dark:bg-white/5 backdrop-blur-sm border border-[#E8DFC9] dark:border-white/10 rounded-2xl hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group"
           >
-            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3">
-              <Shield className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]/50" />
+            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
+              <MessageSquare className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
             </div>
             <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Nhật Ký</span>
           </button>
-
+          
           <button
-            disabled
-            className="flex flex-col items-center p-5 bg-white/20 dark:bg-white/[0.02] backdrop-blur-sm border border-[#E8DFC9]/50 dark:border-white/5 rounded-2xl opacity-50 cursor-not-allowed"
+            onClick={onStats}
+            className="flex flex-col items-center p-5 bg-white/40 dark:bg-white/5 backdrop-blur-sm border border-[#E8DFC9] dark:border-white/10 rounded-2xl hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group"
           >
-            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3">
-              <BarChart3 className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]/50" />
+            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
+              <BarChart3 className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
             </div>
-            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Biểu Đồ</span>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Thành Tựu</span>
           </button>
         </div>
       </div>

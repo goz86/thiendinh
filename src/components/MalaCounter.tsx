@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, RotateCcw } from 'lucide-react';
+import { ChevronLeft, RotateCcw, Box, Sparkles, Diamond } from 'lucide-react';
+import type { MalaMaterial } from '../types';
 
 interface MalaCounterProps {
   onBack: () => void;
@@ -8,6 +9,7 @@ interface MalaCounterProps {
 
 export const MalaCounter: React.FC<MalaCounterProps> = ({ onBack }) => {
   const [count, setCount] = useState(0);
+  const [material, setMaterial] = useState<MalaMaterial>('agarwood');
   const [beads, setBeads] = useState<number[]>([0, 1, 2, 3, 4, 5, 6, 7]); // Visible beads
   const audioContextRef = useRef<AudioContext | null>(null);
 
@@ -23,23 +25,38 @@ export const MalaCounter: React.FC<MalaCounterProps> = ({ onBack }) => {
     const gain = ctx.createGain();
     const filter = ctx.createBiquadFilter();
 
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(800, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.05);
+    // Frequency and Type based on Material
+    let freq = 800;
+    let type: OscillatorType = 'square';
+    let decay = 0.05;
+
+    if (material === 'jade') {
+      freq = 1200;
+      type = 'sine';
+      decay = 0.08;
+    } else if (material === 'tiger_eye') {
+      freq = 600;
+      type = 'sawtooth';
+      decay = 0.04;
+    }
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + decay);
 
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(2000, ctx.currentTime);
 
     gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + decay);
 
     osc.connect(filter);
     filter.connect(gain);
     gain.connect(ctx.destination);
 
     osc.start();
-    osc.stop(ctx.currentTime + 0.05);
-  }, []);
+    osc.stop(ctx.currentTime + decay);
+  }, [material]);
 
   const handleNext = () => {
     setCount(prev => prev + 1);
@@ -112,15 +129,25 @@ export const MalaCounter: React.FC<MalaCounterProps> = ({ onBack }) => {
                 }}
                 exit={{ opacity: 0, y: 100 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                className={`w-16 h-16 rounded-full shadow-xl relative overflow-hidden ${
+                className={`w-16 h-16 rounded-full shadow-2xl relative overflow-hidden flex items-center justify-center ${
                    index === 3 
-                    ? 'bg-gradient-to-br from-[#8B4513] to-[#5D2E0C] border-2 border-amber-950/20' 
-                    : 'bg-gradient-to-br from-[#A0522D] to-[#8B4513] opacity-80'
+                    ? material === 'agarwood' ? 'bg-gradient-to-br from-[#5D2E0C] to-[#3D1E08] border-2 border-amber-950/40' :
+                      material === 'jade' ? 'bg-gradient-to-br from-[#2D5A27] to-[#1B3D17] border-2 border-emerald-950/40' :
+                      'bg-gradient-to-br from-[#B8860B] to-[#5D4037] border-2 border-orange-950/40'
+                    : material === 'agarwood' ? 'bg-gradient-to-br from-[#8B4513] to-[#5D2E0C] opacity-90' :
+                      material === 'jade' ? 'bg-gradient-to-br from-[#4A7C44] to-[#2D5A27] opacity-95' :
+                      'bg-gradient-to-br from-[#DAA520] to-[#B8860B] opacity-90'
                 }`}
               >
+                {material === 'tiger_eye' && (
+                  <div className="absolute inset-0 opacity-40 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(0,0,0,0.2)_10px,rgba(0,0,0,0.2)_20px)]" />
+                )}
+                {material === 'jade' && (
+                  <div className="absolute inset-0 bg-white/10 mix-blend-overlay" />
+                )}
                 {/* Highlight/Shine for 3D look */}
-                <div className="absolute top-2 left-3 w-4 h-4 bg-white/20 blur-sm rounded-full" />
-                <div className="absolute bottom-2 right-3 w-6 h-6 bg-black/20 blur-md rounded-full" />
+                <div className="absolute top-2 left-3 w-4 h-4 bg-white/30 blur-[2px] rounded-full" />
+                <div className="absolute bottom-2 right-3 w-6 h-6 bg-black/30 blur-md rounded-full" />
               </motion.div>
             ))}
           </AnimatePresence>
@@ -144,8 +171,28 @@ export const MalaCounter: React.FC<MalaCounterProps> = ({ onBack }) => {
         </div>
       </div>
 
-      {/* Footer Info */}
-      <div className="p-8 text-center bg-transparent pointer-events-none">
+      {/* Footer Info & Material Selection */}
+      <div className="p-8 flex flex-col items-center gap-6 bg-white/50 dark:bg-black/20 backdrop-blur-md border-t border-[#E8DFC9] dark:border-white/5">
+        <div className="flex gap-4 p-1.5 bg-[#FCF9F3] dark:bg-white/5 rounded-2xl border border-[#E8DFC9] dark:border-white/10 shadow-sm pointer-events-auto">
+          {[
+            { id: 'agarwood', icon: Box, label: 'Gỗ Trầm' },
+            { id: 'jade', icon: Diamond, label: 'Ngọc Bích' },
+            { id: 'tiger_eye', icon: Sparkles, label: 'Mắt Hổ' }
+          ].map(m => (
+            <button
+              key={m.id}
+              onClick={(e) => { e.stopPropagation(); setMaterial(m.id as MalaMaterial); }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm transition-all cursor-pointer ${
+                material === m.id
+                  ? 'bg-[#5A4D41] text-white shadow-md'
+                  : 'text-[#8B7D6E] hover:bg-white dark:hover:bg-white/10'
+              }`}
+            >
+              <m.icon className="w-4 h-4" />
+              {m.label}
+            </button>
+          ))}
+        </div>
         <p className="text-sm text-[#8B7D6E] dark:text-[#B0A090] opacity-60">Chạm vào bất cứ đâu để lần chuỗi</p>
       </div>
     </div>

@@ -7,10 +7,11 @@ import { Auth } from './components/Auth';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MalaCounter } from './components/MalaCounter';
 import { TempleTools } from './components/TempleTools';
+import { Journal } from './components/Journal';
 import { supabase } from './lib/supabase';
 import type { BreathingTechnique } from './types';
 
-type View = 'library' | 'custom' | 'visualizer' | 'stats' | 'auth' | 'admin' | 'mala' | 'temple_tools';
+type View = 'library' | 'custom' | 'visualizer' | 'stats' | 'auth' | 'admin' | 'mala' | 'temple_tools' | 'journal';
 
 function App() {
   const [view, setView] = useState<View>('library');
@@ -97,6 +98,10 @@ function App() {
         <Stats
           onBack={() => setView('library')}
         />
+      ) : view === 'journal' ? (
+        <Journal
+          onBack={() => setView('library')}
+        />
       ) : view === 'admin' ? (
         <AdminDashboard
           onBack={() => setView('library')}
@@ -115,6 +120,7 @@ function App() {
           onAdmin={() => setView('admin')}
           onMala={() => setView('mala')}
           onTempleTools={() => setView('temple_tools')}
+          onJournal={() => setView('journal')}
           user={user}
           darkMode={darkMode}
           onToggleDark={() => setDarkMode(!darkMode)}
