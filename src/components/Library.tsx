@@ -59,7 +59,7 @@ export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, o
           className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-[#E8DFC9] dark:border-white/10 rounded-full hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer shadow-sm"
         >
           <BarChart3 className="w-4 h-4 text-[#A37B5C] dark:text-[#DECAA4]" />
-          <span className="text-sm text-[#5A4D41] dark:text-[#F5EDE0] font-medium">{stats.totalSessions} buổi</span>
+          <span className="text-sm text-[#5A4D41] dark:text-[#F5EDE0] font-medium">{stats.monthlySessions} lần thiền trong tháng</span>
           {stats.streak > 0 && (
             <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-300 px-2 py-0.5 rounded-full font-medium">🔥 {stats.streak}</span>
           )}
@@ -115,6 +115,8 @@ export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, o
         <h1 className="text-4xl font-normal mb-2">Hơi Thở Chánh Niệm</h1>
         <p className="text-[#8B7D6E] dark:text-[#B0A090]">Chọn một bài tập thở để kết nối lại với tâm trí và cơ thể bạn.</p>
       </div>
+
+      <div className="mb-10" />
 
       {/* Daily Quote */}
       <div className="mb-10 mx-auto max-w-xl">
@@ -215,13 +217,13 @@ export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, o
             <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
               <BarChart3 className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
             </div>
-            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Thành Tựu</span>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Tiến Trình</span>
           </button>
         </div>
       </div>
 
-      {/* PWA Install hint */}
-      <div className="mt-10 text-center">
+
+      <div className="text-center pb-32">
         <p className="text-xs text-[#C2A385] dark:text-[#B0A090]/60">Thiền Định — © 2026 — goz ☁️</p>
       </div>
       <ConfirmModal

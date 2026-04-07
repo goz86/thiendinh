@@ -3,8 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Calendar as CalendarIcon, MessageSquare, Trash2, Search } from 'lucide-react';
 import type { JournalEntry, Mood } from '../types';
 import { loadJournalEntries, deleteJournalEntry } from '../utils/storage';
-import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
 
 interface JournalProps {
   onBack: () => void;
@@ -102,7 +100,7 @@ export const Journal: React.FC<JournalProps> = ({ onBack }) => {
                       <div className="flex items-center gap-2 mb-1">
                         <CalendarIcon className="w-3.5 h-3.5 text-[#A37B5C]" />
                         <span className="text-[11px] font-medium text-[#8B7D6E] dark:text-[#DECAA4]/60 uppercase tracking-wider">
-                          {format(new Date(entry.date), "eeee, d MMMM yyyy", { locale: vi })}
+                          {new Date(entry.date).toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">

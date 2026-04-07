@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronLeft, Award, Flame, Timer, Activity, TrendingUp, Info } from 'lucide-react';
+import { ChevronLeft, Award, Flame, Timer, Activity } from 'lucide-react';
 import { calculateStatsFromSessions, loadSessions } from '../utils/storage';
-import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
 
 interface StatsProps {
   onBack: () => void;
@@ -17,7 +15,8 @@ export const Stats: React.FC<StatsProps> = ({ onBack }) => {
     const sessionData = loadSessions();
     const calculated = calculateStatsFromSessions(sessionData);
     setStats(calculated);
-    setSessions(sessionData.slice(0, 5)); // Just the last 5 for history
+    const reversed = [...sessionData].reverse();
+    setSessions(reversed.slice(0, 5)); // 5 buổi gần nhất
   }, []);
 
   if (!stats) return null;
@@ -36,7 +35,7 @@ export const Stats: React.FC<StatsProps> = ({ onBack }) => {
         <div className="w-12 h-12" /> {/* Spacer */}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 pb-24 pt-4 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto px-6 pb-32 pt-4 custom-scrollbar">
         {/* Core Stats Grid */}
         <div className="grid grid-cols-2 gap-4 mb-8">
           <motion.div 
@@ -48,7 +47,7 @@ export const Stats: React.FC<StatsProps> = ({ onBack }) => {
               <Flame className="w-6 h-6 text-orange-500" />
             </div>
             <span className="text-3xl font-bold text-[#4A3C31] dark:text-[#F5EDE0]">{stats.streak}</span>
-            <span className="text-xs font-semibold text-[#8B7D6E] dark:text-[#DECAA4]/60 uppercase tracking-widest mt-1">Ngày liên tiếp</span>
+            <span className="text-xs font-semibold text-[#8B7D6E] dark:text-[#DECAA4]/60 uppercase tracking-widest mt-1"> Chuỗi ngày liên tiếp</span>
           </motion.div>
 
           <motion.div 
@@ -86,40 +85,75 @@ export const Stats: React.FC<StatsProps> = ({ onBack }) => {
                   <div className="absolute inset-0 rounded-full bg-[#A37B5C]/10 blur-lg -z-10" />
                 </div>
                 <span className="text-[11px] font-bold text-[#4A3C31] dark:text-[#F5EDE0] whitespace-nowrap">{badge.name}</span>
-                <span className="text-[9px] text-[#8B7D6E] dark:text-[#DECAA4]/50 mt-0.5">{format(new Date(badge.earnedDate), 'dd/MM/yy')}</span>
+                <span className="text-[9px] text-[#8B7D6E] dark:text-[#DECAA4]/50 mt-0.5">{new Date(badge.earnedDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
               </motion.div>
             ))}
             
             {/* Locked Badges Placeholder */}
-            {stats.badges.length < 3 && (
-              <div className="flex flex-col items-center opacity-30">
-                <div className="w-20 h-20 rounded-full bg-gray-100 dark:bg-white/5 border border-dashed border-gray-400 flex items-center justify-center mb-2">
-                  <TrendingUp className="w-8 h-8 text-gray-400" />
+            {stats.badges.length < 6 && (
+              <div className="flex flex-col items-center opacity-20">
+                <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-white/5 border border-dashed border-gray-400 flex items-center justify-center mb-2">
+                  <Award className="w-6 h-6 text-gray-400" />
                 </div>
-                <span className="text-[10px] text-gray-500 italic">Đang khám phá...</span>
+                <span className="text-[10px] text-gray-500 italic">Tiếp tục tu tập...</span>
               </div>
             )}
           </div>
         </div>
 
-        {/* Progress Summary Card */}
-        <div className="bg-white/80 dark:bg-white/5 p-6 rounded-3xl border border-[#E8DFC9] dark:border-white/10 shadow-sm mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-[#4A3C31] dark:text-[#F5EDE0]/80">Tổng kết</h3>
+        {/* Progress Summary Card - REDESIGNED TO HORIZONTAL WITH BAR CHART */}
+        <div className="bg-white/80 dark:bg-white/5 p-6 rounded-3xl border border-[#E8DFC9] dark:border-white/10 shadow-sm mb-8 overflow-hidden">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-sm font-bold text-[#4A3C31] dark:text-[#F5EDE0]/80 uppercase tracking-widest">Phân tích 7 ngày</h3>
             <Activity className="w-4 h-4 text-[#A37B5C]" />
           </div>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center pb-3 border-b border-[#F2EAE0] dark:border-white/5">
-              <span className="text-sm text-[#8B7D6E] dark:text-[#DECAA4]/60">Số buổi thiền</span>
-              <span className="text-sm font-bold text-[#4A3C31] dark:text-[#F5EDE0]">{stats.sessionCount}</span>
+          
+          <div className="flex flex-col md:flex-row gap-8 items-center">
+            {/* Left: Bar Chart */}
+            <div className="flex-1 w-full flex items-end justify-between h-36 px-1 gap-1 sm:gap-2">
+              {stats.dailyHistory.map((day: any, idx: number) => {
+                const maxMins = Math.max(...stats.dailyHistory.map((d: any) => d.minutes), 30);
+                const height = (day.minutes / maxMins) * 100;
+                return (
+                  <div key={idx} className="flex flex-col items-center flex-1 gap-3 group h-full justify-end">
+                    <div className="relative w-full flex justify-center items-end h-full">
+                      {/* Background Track for the bar */}
+                      <div className="absolute inset-y-0 w-full max-w-[16px] bg-[#E8DFC9]/10 dark:bg-white/5 rounded-full" />
+                      
+                      <motion.div 
+                        initial={{ height: 0 }}
+                        animate={{ height: `${Math.max(height, 8)}%` }}
+                        transition={{ duration: 0.8, delay: idx * 0.05, ease: "easeOut" }}
+                        className={`w-full max-w-[16px] rounded-t-full relative z-10 ${day.minutes > 0 ? 'bg-gradient-to-t from-[#A37B5C] to-[#DECAA4] shadow-[0_0_10px_rgba(163,123,92,0.2)]' : 'bg-[#E8DFC9]/40 dark:bg-white/10'}`}
+                      />
+                      {/* Tooltip */}
+                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#4A3C31] dark:bg-[#DECAA4] text-white dark:text-[#4A3C31] text-[9px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20 font-bold shadow-sm">
+                        {day.minutes} p
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-[#8B7D6E] dark:text-[#DECAA4]/50">{day.label}</span>
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex justify-between items-center pb-3 border-b border-[#F2EAE0] dark:border-white/5">
-              <span className="text-sm text-[#8B7D6E] dark:text-[#DECAA4]/60">Kỷ lục chuỗi ngày</span>
-              <span className="text-sm font-bold text-[#4A3C31] dark:text-[#F5EDE0]">{stats.streak} ngày</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-[#8B7D6E] dark:text-[#DECAA4]/60">Thời gian trung bình</span>
-              <span className="text-sm font-bold text-[#4A3C31] dark:text-[#F5EDE0]">{stats.sessionCount > 0 ? Math.round(stats.totalDuration / 60 / stats.sessionCount) : 0} phút</span>
+
+            {/* Vertical Divider (Desktop only) */}
+            <div className="hidden md:block w-px h-24 bg-[#E8DFC9] dark:bg-white/10" />
+
+            {/* Right: Metrics */}
+            <div className="w-full md:w-48 space-y-4">
+              <div className="flex justify-between items-center pb-2 border-b border-[#F2EAE0] dark:border-white/5">
+                <span className="text-[11px] text-[#8B7D6E] dark:text-[#DECAA4]/60">Số lần thiền</span>
+                <span className="text-xs font-bold text-[#4A3C31] dark:text-[#F5EDE0]">{stats.sessionCount}</span>
+              </div>
+              <div className="flex justify-between items-center pb-2 border-b border-[#F2EAE0] dark:border-white/5">
+                <span className="text-[11px] text-[#8B7D6E] dark:text-[#DECAA4]/60">Chuỗi ngày</span>
+                <span className="text-xs font-bold text-[#4A3C31] dark:text-[#F5EDE0]">{stats.streak} ngày</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] text-[#8B7D6E] dark:text-[#DECAA4]/60">Trung bình</span>
+                <span className="text-xs font-bold text-[#4A3C31] dark:text-[#F5EDE0]">{stats.sessionCount > 0 ? Math.round(stats.totalDuration / 60 / stats.sessionCount) : 0} p</span>
+              </div>
             </div>
           </div>
         </div>
@@ -133,7 +167,7 @@ export const Stats: React.FC<StatsProps> = ({ onBack }) => {
                 <div key={s.id} className="flex items-center justify-between p-4 bg-white/50 dark:bg-white/5 rounded-2xl border border-[#E8DFC9] dark:border-white/10">
                   <div className="flex flex-col">
                     <span className="text-xs font-medium text-[#4A3C31] dark:text-[#F5EDE0]">{s.techniqueName}</span>
-                    <span className="text-[10px] text-[#8B7D6E] dark:text-[#DECAA4]/50">{format(new Date(s.date), 'dd MMMM yyyy HH:mm', { locale: vi })}</span>
+                    <span className="text-[10px] text-[#8B7D6E] dark:text-[#DECAA4]/50">{new Date(s.date).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
                   <span className="text-xs font-bold text-[#A37B5C]">{Math.floor(s.durationSeconds / 60)} phút</span>
                 </div>
@@ -143,13 +177,6 @@ export const Stats: React.FC<StatsProps> = ({ onBack }) => {
         )}
       </div>
 
-      {/* Aesthetic Bottom Info */}
-      <div className="p-8 text-center bg-transparent pointer-events-none absolute bottom-4 w-full">
-         <div className="flex items-center justify-center gap-1.5 opacity-40">
-           <Info className="w-3.5 h-3.5" />
-           <p className="text-[10px] font-medium tracking-wider uppercase text-[#8B7D6E] dark:text-[#DECAA4]">Kiên trì là chìa khóa của sự tỉnh thức</p>
-         </div>
-      </div>
     </div>
   );
 };

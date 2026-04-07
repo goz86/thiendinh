@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, X, Volume2, VolumeX, ArrowLeft, Music, Maximize, Minimize, Mic, MicOff, Timer, RefreshCw, Sparkles, Flower, Wind, Send } from 'lucide-react';
 import type { BreathingTechnique, VisualMode, Mood } from '../types';
-import { addSession, addJournalEntry } from '../utils/storage';
+import { addSession, addJournalEntry, getLocalDateString } from '../utils/storage';
 import { supabase } from '../lib/supabase';
 
 interface VisualizerProps {
@@ -145,6 +145,13 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
   const [customMusicList, setCustomMusicList] = useState<{id: string, label: string}[]>([]);
   const [bgVolume, setBgVolume] = useState(0.5);
   const [visualMode, setVisualMode] = useState<VisualMode>('cosmic');
+  
+  // Mobile detection for performance
+  const isMobile = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }, []);
+
   const [showJournalInput, setShowJournalInput] = useState(false);
   const [sessionMood, setSessionMood] = useState<Mood>('peaceful');
   const [sessionNote, setSessionNote] = useState('');
@@ -162,9 +169,9 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
   const exhaleAudioRef = useRef<HTMLAudioElement | null>(null);
   const holdAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const layer1 = useMemo(() => generateParticles(100, 60, 300), []);
-  const layer2 = useMemo(() => generateParticles(80, 100, 450), []);
-  const layer3 = useMemo(() => generateParticles(60, 150, 600), []);
+  const layer1 = useMemo(() => generateParticles(isMobile ? 35 : 100, 60, 300), [isMobile]);
+  const layer2 = useMemo(() => generateParticles(isMobile ? 25 : 80, 100, 450), [isMobile]);
+  const layer3 = useMemo(() => generateParticles(isMobile ? 20 : 60, 150, 600), [isMobile]);
 
   const isActive = appState === 'breathing';
 
@@ -484,14 +491,14 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
   const saveJournalAndClose = () => {
     if (sessionTime > 0) {
       const sessionId = addSession({
-        date: new Date().toISOString().split('T')[0],
+        date: getLocalDateString(),
         techniqueId: technique.id,
         techniqueName: technique.name,
         durationSeconds: sessionTime,
       });
 
       addJournalEntry({
-        date: new Date().toISOString().split('T')[0],
+        date: getLocalDateString(),
         mood: sessionMood,
         note: sessionNote,
         sessionId
@@ -526,7 +533,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
     setTimeLeft(technique.pattern.inhale);
     if (sessionTime > 0) {
       addSession({
-        date: new Date().toISOString().split('T')[0],
+        date: getLocalDateString(),
         techniqueId: technique.id,
         techniqueName: technique.name,
         durationSeconds: sessionTime,
@@ -581,8 +588,8 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
     return isNaN(dur) || dur <= 0.1 ? 1 : dur;
   };
 
-  const renderParticles = (particles: typeof layer1) => {
-    return particles.map(p => (
+  const renderParticles = useCallback((particles: typeof layer1) => {
+    return particles.map((p) => (
       <div
         key={p.id}
         className="absolute rounded-full"
@@ -592,29 +599,40 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
           backgroundColor: p.color,
           opacity: p.opacity,
           transform: `rotate(${p.angle}deg) translateX(${p.radius}px) rotate(${p.swirl}deg)`,
-          transformOrigin: '0 0'
+          transformOrigin: '0 0',
+          willChange: 'transform'
         }}
       />
     ));
-  };
+  }, []);
 
-  const renderSacredGeometry = () => {
+  const renderSacredGeometry = useCallback(() => {
     const scale = getScale(0.6);
     const duration = getDuration();
     return (
-      <svg className="w-[300px] h-[300px] sm:w-[500px] sm:h-[500px] transition-transform duration-500" viewBox="0 0 200 200">
+      <svg className="w-full h-full max-w-[90vh] max-h-[90vh] transition-transform duration-500" viewBox="0 0 200 200">
         <defs>
           <linearGradient id="mandala-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#DECAA4" />
+            <stop offset="0%" stopColor="#FFE4B5" />
+            <stop offset="50%" stopColor="#DECAA4" />
             <stop offset="100%" stopColor="#A37B5C" />
           </linearGradient>
+          {!isMobile && (
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          )}
         </defs>
         <motion.g
           animate={{ rotate: 360 }}
           transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
-          style={{ originX: "100px", originY: "100px" }}
+          style={{ originX: "100px", originY: "100px", willChange: 'transform' }}
         >
-          {Array.from({ length: 6 }).map((_, i) => (
+          {Array.from({ length: isMobile ? 4 : 6 }).map((_, i) => (
             <motion.circle
               key={i}
               cx="100"
@@ -629,19 +647,22 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
                 opacity: 0.3 + (1 - i * 0.1) * 0.4
               }}
               transition={{ duration, ease: "easeInOut" }}
+              style={{ willChange: 'transform, opacity' }}
             />
           ))}
-          {Array.from({ length: 8 }).map((_, i) => (
+          {Array.from({ length: isMobile ? 6 : 8 }).map((_, i) => (
             <motion.path
               key={`petal-${i}`}
               d="M100 100 Q120 60 140 100 T100 140 Q80 100 60 60 T100 100"
               fill="none"
               stroke="url(#mandala-grad)"
-              strokeWidth="0.8"
-              style={{ originX: "100px", originY: "100px" }}
+              strokeWidth="1.2"
+              filter={isMobile ? "drop-shadow(0 0 2px rgba(222,202,164,0.4))" : "url(#glow)"}
+              style={{ originX: "100px", originY: "100px", willChange: 'transform, opacity' }}
               animate={{ 
-                rotate: i * 45,
-                scale: 0.5 + scale * 0.5
+                rotate: i * (360 / (isMobile ? 6 : 8)),
+                scale: 0.6 + scale * 0.6,
+                opacity: 0.4 + scale * 0.6
               }}
               transition={{ duration, ease: "easeInOut" }}
             />
@@ -649,34 +670,48 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
         </motion.g>
       </svg>
     );
-  };
+  }, [isMobile, getScale, getDuration]);
 
-  const renderZenGarden = () => {
+  const renderZenGarden = useCallback(() => {
     const scale = getScale(1);
     const duration = getDuration();
     return (
-      <div className="relative w-[300px] h-[300px] sm:w-[500px] sm:h-[500px] flex items-center justify-center">
-        {Array.from({ length: 5 }).map((_, i) => (
+      <div className="relative w-full h-full flex items-center justify-center">
+        {Array.from({ length: isMobile ? 4 : 6 }).map((_, i) => (
           <motion.div
             key={i}
-            className="absolute rounded-full border border-[#C2A385]/30"
+            className="absolute rounded-full border-2 border-[#DECAA4]/20 shadow-[0_0_15px_rgba(222,202,164,0.1)]"
             initial={{ width: 0, height: 0, opacity: 0 }}
             animate={{ 
-              width: (i + 1) * 80 * scale,
-              height: (i + 1) * 80 * scale,
-              opacity: (1 - i * 0.2) * (phase === 'inhale' ? 0.8 : 0.3)
+              width: (i + 1) * (isMobile ? 60 : 70) * scale,
+              height: (i + 1) * (isMobile ? 60 : 70) * scale,
+              opacity: (0.8 - i * (isMobile ? 0.15 : 0.12)) * (phase === 'inhale' || phase === 'hold1' ? 0.9 : 0.4),
+              borderWidth: phase === 'inhale' ? '3px' : '1.5px'
             }}
             transition={{ duration, ease: "easeInOut" }}
+            style={{ willChange: 'width, height, opacity' }}
           />
         ))}
         <motion.div
-          className="w-16 h-16 bg-[#A37B5C] rounded-full shadow-2xl"
-          animate={{ scale: 0.8 + scale * 0.4 }}
-          transition={{ duration, ease: "easeInOut" }}
-        />
+          className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-[#A37B5C] to-[#5A4D41] rounded-[40%_60%_70%_30%/40%_50%_60%_50%] shadow-2xl relative"
+          animate={{ 
+            scale: 0.85 + scale * 0.35,
+            rotate: [0, 5, -5, 0],
+            borderRadius: ["40% 60% 70% 30%", "50% 50% 50% 50%", "40% 60% 70% 30%"]
+          }}
+          transition={{ 
+            scale: { duration, ease: "easeInOut" },
+            rotate: { duration: 10, repeat: Infinity, ease: "linear" },
+            borderRadius: { duration: 5, repeat: Infinity, ease: "easeInOut" }
+          }}
+          style={{ willChange: 'transform' }}
+        >
+          {/* Stone glow inner */}
+          <div className="absolute inset-0 bg-white/5 blur-md rounded-full" />
+        </motion.div>
       </div>
     );
-  };
+  }, [isMobile, getScale, getDuration, phase]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -760,7 +795,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
                 </div>
                 {/* Session time or remaining time */}
                 <div className={`mt-3 py-1.5 px-4 rounded-full border border-[#DECAA4]/50 dark:border-white/10 bg-white/40 dark:bg-white/5 shadow-sm transition-opacity duration-1000 ${(isActive || (sessionTime || 0) > 0) ? 'opacity-100' : 'opacity-0'} pointer-events-auto`}>
-                  {(remainingTime || 0) !== null && !isNaN(remainingTime as number) ? (
+                  {remainingTime !== null && !isNaN(remainingTime as number) ? (
                     <>
                       <span className="text-sm font-medium text-[#8B7D6E] dark:text-[#B0A090]">Còn lại: </span>
                       <span className="text-[#A37B5C] dark:text-[#DECAA4] font-mono text-base ml-1">{formatTime(remainingTime || 0)}</span>
@@ -1141,76 +1176,83 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
       </AnimatePresence>
 
 
-      {/* Core breathing orb area */}
-      <div className="relative flex items-center justify-center w-full h-[400px] sm:h-[500px] z-20 mt-12 bg-transparent">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={visualMode}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.1 }}
-            transition={{ duration: 0.8 }}
-            className="absolute inset-0 flex items-center justify-center"
-          >
-            {visualMode === 'cosmic' && (
-              <div className="relative flex items-center justify-center w-[300px] h-[300px]">
-                {/* Cosmic Vortex Layers */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 w-full h-full opacity-90">
-                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 120, ease: "linear" }} className="absolute flex items-center justify-center">
-                    <motion.div animate={{ scale: getScale(0.8) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
-                      {renderParticles(layer1)}
+      {/* Core breathing orb area - Full Screen Background */}
+      {useMemo(() => (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-transparent overflow-hidden">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={visualMode}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 flex items-center justify-center"
+            >
+              {visualMode === 'cosmic' && (
+                <div className="relative flex items-center justify-center w-full h-full">
+                  {/* Cosmic Vortex Layers */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 w-full h-full opacity-90 overflow-hidden">
+                    <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 120, ease: "linear" }} className="absolute flex items-center justify-center">
+                      <motion.div animate={{ scale: getScale(0.8) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
+                        {renderParticles(layer1)}
+                      </motion.div>
                     </motion.div>
-                  </motion.div>
 
-                  <motion.div animate={{ rotate: -360 }} transition={{ repeat: Infinity, duration: 180, ease: "linear" }} className="absolute flex items-center justify-center">
-                    <motion.div animate={{ scale: getScale(1.1) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
-                      {renderParticles(layer2)}
+                    <motion.div animate={{ rotate: -360 }} transition={{ repeat: Infinity, duration: 180, ease: "linear" }} className="absolute flex items-center justify-center">
+                      <motion.div animate={{ scale: getScale(1.1) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
+                        {renderParticles(layer2)}
+                      </motion.div>
                     </motion.div>
-                  </motion.div>
 
-                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 250, ease: "linear" }} className="absolute flex items-center justify-center">
-                    <motion.div animate={{ scale: getScale(1.4) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
-                      {renderParticles(layer3)}
+                    <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 250, ease: "linear" }} className="absolute flex items-center justify-center">
+                      <motion.div animate={{ scale: getScale(1.4) }} transition={{ duration: getDuration(), ease: "easeInOut" }} className="absolute flex items-center justify-center">
+                        {renderParticles(layer3)}
+                      </motion.div>
                     </motion.div>
-                  </motion.div>
+                  </div>
 
                   {/* Glow rings that pulse with breathing */}
                   {isActive && (
-                    <>
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
                       <motion.div
-                        animate={{ scale: getScale(0.6), opacity: [0.1, 0.25, 0.1] }}
-                        transition={{ duration: getDuration(), ease: "easeInOut", opacity: { repeat: Infinity, duration: 3 } }}
-                        className="absolute w-[400px] h-[400px] rounded-full border border-[#DECAA4]/20 dark:border-[#DECAA4]/10"
+                        animate={{ scale: getScale(0.6), opacity: [0.1, 0.2, 0.1] }}
+                        transition={{ duration: getDuration(), ease: "easeInOut" }}
+                        className="absolute w-[400px] h-[400px] rounded-full border border-[#DECAA4]/20"
+                        style={{ willChange: 'transform, opacity' }}
                       />
                       <motion.div
-                        animate={{ scale: getScale(0.9), opacity: [0.05, 0.15, 0.05] }}
-                        transition={{ duration: getDuration(), ease: "easeInOut", opacity: { repeat: Infinity, duration: 4 } }}
-                        className="absolute w-[550px] h-[550px] rounded-full border border-[#8BA6B8]/15 dark:border-[#8BA6B8]/10"
+                        animate={{ scale: getScale(0.9), opacity: [0.05, 0.1, 0.05] }}
+                        transition={{ duration: getDuration(), ease: "easeInOut" }}
+                        className="absolute w-[550px] h-[550px] rounded-full border border-[#8BA6B8]/15"
+                        style={{ willChange: 'transform, opacity' }}
                       />
-                    </>
+                    </div>
                   )}
+
+                  <motion.div
+                    animate={{ scale: getScale(1.2) }}
+                    transition={{ duration: getDuration(), ease: "easeInOut" }}
+                    className="absolute w-40 h-40 rounded-full opacity-30 filter blur-3xl bg-[#C2A385] mix-blend-multiply dark:mix-blend-screen"
+                    style={{ willChange: 'transform' }}
+                  />
+                  
+                  <motion.div
+                    animate={{ scale: getScale(0.5) }}
+                    transition={{ duration: getDuration(), ease: "easeInOut" }}
+                    className="absolute w-56 h-56 rounded-full opacity-[0.85] backdrop-blur-[2px] border border-white/60 dark:border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.7)] bg-gradient-to-tr from-[#DECAA4]/20 to-[#FCF9F3]/80 dark:from-[#3a3028]/60 dark:to-[#2a2420]/80 flex items-center justify-center overflow-hidden"
+                    style={{ willChange: 'transform' }}
+                  />
                 </div>
-                <motion.div
-                  animate={{ scale: getScale(1.2) }}
-                  transition={{ duration: getDuration(), ease: "easeInOut" }}
-                  className="absolute w-40 h-40 rounded-full opacity-30 filter blur-3xl bg-[#C2A385] mix-blend-multiply dark:mix-blend-screen"
-                />
-                
-                <motion.div
-                  animate={{ scale: getScale(0.5) }}
-                  transition={{ duration: getDuration(), ease: "easeInOut" }}
-                  className="absolute w-56 h-56 rounded-full opacity-[0.85] backdrop-blur-[2px] border border-white/60 dark:border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.7)] dark:shadow-[0_0_50px_rgba(222,202,164,0.15)] bg-gradient-to-tr from-[#DECAA4]/20 to-[#FCF9F3]/80 dark:from-[#3a3028]/60 dark:to-[#2a2420]/80 flex items-center justify-center overflow-hidden"
-                />
-              </div>
-            )}
+              )}
+              
+              {visualMode === 'sacred' && renderSacredGeometry()}
+              {visualMode === 'garden' && renderZenGarden()}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      ), [visualMode, phase, isMobile, renderParticles, renderSacredGeometry, renderZenGarden, getScale, getDuration, layer1, layer2, layer3, isActive])}
 
-            {visualMode === 'sacred' && renderSacredGeometry()}
-            {visualMode === 'garden' && renderZenGarden()}
-          </motion.div>
-        </AnimatePresence>
-
-        {/* Center text */}
-        <div className="absolute flex flex-col items-center justify-center pointer-events-none drop-shadow-sm z-30">
+        {/* Center text - Floating on top of visual */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none drop-shadow-sm z-30">
           <AnimatePresence mode="wait">
             {appState === 'countdown' ? (
               <motion.div
@@ -1256,10 +1298,9 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
             )}
           </AnimatePresence>
         </div>
-      </div>
 
       {/* Progress bar — 60fps smooth via requestAnimationFrame */}
-      <div className="absolute bottom-32 w-full max-w-md px-6 z-40">
+      <div className="absolute bottom-32 w-full max-w-md px-6 z-40 left-1/2 -translate-x-1/2">
         <div className={`transition-opacity duration-500 ${isActive ? 'opacity-100' : 'opacity-0'}`}>
           <div className="h-[3px] bg-[#E8DFC9] dark:bg-white/10 rounded-full overflow-hidden w-full">
             <div

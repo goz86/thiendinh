@@ -4,6 +4,14 @@ import { supabase } from '../lib/supabase';
 const SESSIONS_KEY = 'mindful-meditation-sessions';
 const JOURNAL_KEY = 'mindful-meditation-journal';
 
+// Helpers
+export const getLocalDateString = (d: Date = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // Sessions
 export const loadSessions = (): Session[] => {
   const saved = localStorage.getItem(SESSIONS_KEY);
@@ -57,19 +65,37 @@ export const addJournalEntry = (entry: Omit<JournalEntry, 'id'>) => {
 
 // Badges & Stats
 export const calculateStatsFromSessions = (sessions: Session[]) => {
-  const totalMinutes = Math.round((sessions || []).reduce((sum, s) => sum + (s.durationSeconds || 0), 0) / 60) || 0;
-  const totalSessions = (sessions || []).length || 0;
+  // Always sort a copy by date (oldest first) to identify milestones correctly
+  const sortedAsc = [...(sessions || [])].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  
+  const totalDuration = (sessions || []).reduce((sum, s) => sum + (s.durationSeconds || 0), 0);
+  const totalMinutes = Math.round(totalDuration / 60) || 0;
+  const sessionCount = (sessions || []).length || 0;
 
-  // Calculate streak
+  // Monthly stats
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const monthlySessions = (sessions || []).filter(s => {
+    const sDate = new Date(s.date);
+    return sDate.getMonth() === currentMonth && sDate.getFullYear() === currentYear;
+  }).length;
+
+  // Calculate streak (Robust for local dates)
   let streak = 0;
-  const dates = [...new Set(sessions.map(s => s.date))].sort().reverse();
-  const today = new Date().toISOString().split('T')[0];
+  // Normalize dates for unique check
+  const dates = [...new Set(sessions.map(s => s.date ? s.date.split('T')[0] : ''))]
+    .filter(d => d !== '')
+    .sort()
+    .reverse();
+    
+  const today = getLocalDateString();
   
   if (dates.length > 0) {
     const d0 = dates[0];
     const todayDate = new Date(today);
     const lastSessionDate = new Date(d0);
-    const diffDays = (todayDate.getTime() - lastSessionDate.getTime()) / (1000 * 60 * 60 * 24);
+    const diffDays = Math.floor((todayDate.getTime() - lastSessionDate.getTime()) / (1000 * 60 * 60 * 24));
     
     // If last session was today or yesterday, streak continues
     if (diffDays <= 1) {
@@ -77,8 +103,8 @@ export const calculateStatsFromSessions = (sessions: Session[]) => {
       for (let i = 0; i < dates.length - 1; i++) {
         const d1 = new Date(dates[i]);
         const d2 = new Date(dates[i + 1]);
-        const diff = (d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24);
-        if (diff <= 1.1) streak++;
+        const diff = Math.round((d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24));
+        if (diff <= 1) streak++;
         else break;
       }
     }
@@ -91,28 +117,53 @@ export const calculateStatsFromSessions = (sessions: Session[]) => {
   });
   const favoriteTechnique = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Chưa định rõ';
 
-  // Last 7 days minutes
-  const last7 = Array(7).fill(0);
-  const now = new Date();
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(now);
+  // Last 7 days minutes with labels (Normalized comparison)
+  const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+  const dailyHistory = Array(7).fill(0).map((_, i) => {
+    const d = new Date();
     d.setDate(d.getDate() - (6 - i));
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = getLocalDateString(d);
+    const dayLabel = days[d.getDay()];
     const dayMins = sessions
-      .filter(s => s.date === dateStr)
+      .filter(s => s.date && s.date.includes(dateStr)) // Match date regardless of full ISO structure
       .reduce((sum, s) => sum + (s.durationSeconds || 0), 0) / 60;
-    last7[i] = Math.round(dayMins);
+    return { label: dayLabel, minutes: Math.round(dayMins) };
+  });
+
+  // Find dates for milestones
+  let minutesSum = 0;
+  let focusDate = today;
+  let mindfulnessDate = today;
+  let focusReached = false;
+  let mindfulnessReached = false;
+
+  for (const s of sortedAsc) {
+    minutesSum += (s.durationSeconds / 60);
+    if (!focusReached && minutesSum >= 100) {
+      focusDate = s.date;
+      focusReached = true;
+    }
+    if (!mindfulnessReached && minutesSum >= 500) {
+      mindfulnessDate = s.date;
+      mindfulnessReached = true;
+    }
   }
 
-  // Badges
-  const badges: Badge[] = [];
-  if (totalSessions >= 1) badges.push({ id: 'beginner', name: 'Sơ tâm', description: 'Hoàn thành buổi thiền đầu tiên', earnedDate: sessions[0].date });
-  if (totalSessions >= 10) badges.push({ id: 'steady', name: 'Tâm bất biến', description: 'Hoàn thành 10 buổi thiền', earnedDate: sessions[9].date });
-  if (streak >= 3) badges.push({ id: 'persistence_3', name: 'Kiên trì', description: 'Duy trì chuỗi 3 ngày thiền', earnedDate: today });
-  if (streak >= 7) badges.push({ id: 'zen_master', name: 'Thiền sư', description: 'Duy trì chuỗi 7 ngày thiền', earnedDate: today });
-  if (totalMinutes >= 100) badges.push({ id: 'stillness', name: 'Tỉnh lặng', description: 'Đạt 100 phút thiền định', earnedDate: today });
+  const firstLongSession = sortedAsc.find(s => s.durationSeconds >= 1800);
+  const limitBreakDate = firstLongSession ? firstLongSession.date : today;
 
-  return { totalMinutes, totalSessions, streak, favoriteTechnique, last7, badges };
+  // Badges (Modern Vietnamese)
+  const badges: Badge[] = [];
+  if (sessionCount >= 1) badges.push({ id: 'beginner', name: 'Khởi đầu', description: 'Hoàn thành buổi đầu tiên', earnedDate: sortedAsc[0].date, icon: '🌱' });
+  if (sessionCount >= 10) badges.push({ id: 'steady', name: 'Kiên trì', description: 'Hoàn thành 10 buổi thiền', earnedDate: sortedAsc[9].date, icon: '🛡️' });
+  if (sessionCount >= 30) badges.push({ id: 'discipline', name: 'Kỷ luật', description: 'Hoàn thành 30 buổi thiền', earnedDate: sortedAsc[29].date, icon: '⚔️' });
+  if (streak >= 7) badges.push({ id: 'habit', name: 'Thói quen', description: 'Duy trì chuỗi 7 ngày liên tiếp', earnedDate: today, icon: '⚓' });
+  if (totalMinutes >= 100) badges.push({ id: 'focus', name: 'Tập trung', description: 'Đạt 100 phút luyện tập', earnedDate: focusDate, icon: '🎯' });
+  if (totalMinutes >= 500) badges.push({ id: 'mindfulness', name: 'Tỉnh thức', description: 'Đạt 500 phút luyện tập', earnedDate: mindfulnessDate, icon: '💎' });
+  
+  if (firstLongSession) badges.push({ id: 'limit_break', name: 'Vượt ngưỡng', description: 'Một buổi thiền trên 30 phút', earnedDate: limitBreakDate, icon: '🚀' });
+
+  return { totalMinutes, sessionCount, monthlySessions, totalDuration, streak, favoriteTechnique, dailyHistory, badges };
 };
 
 export const getStats = () => {
@@ -136,7 +187,8 @@ export const syncWithCloud = async (): Promise<boolean> => {
       let updated = false;
 
       data.forEach((s: any) => {
-        const cloudDate = new Date(s.created_at).toISOString().split('T')[0];
+        const sessionDate = new Date(s.created_at);
+        const cloudDate = getLocalDateString(sessionDate);
         const exists = combined.find((localS: Session) => 
           localS.date === cloudDate && 
           localS.techniqueId === s.technique_id && 
