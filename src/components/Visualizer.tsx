@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, X, Volume2, VolumeX, ArrowLeft, Music, Maximize, Minimize, Mic, MicOff, Timer, RefreshCw, Sparkles, Flower, Wind, Send } from 'lucide-react';
+import { Settings, X, Volume2, VolumeX, ArrowLeft, Music, Maximize, Minimize, Mic, MicOff, Timer, RefreshCw, Sparkles, Flower, Wind, Send, MoonStar, SunMedium } from 'lucide-react';
 import type { BreathingTechnique, VisualMode, Mood } from '../types';
-import { addSession, addJournalEntry, getLocalDateString } from '../utils/storage';
+import { addSession, addJournalEntry, getLocalDateTimeString } from '../utils/storage';
 import { supabase } from '../lib/supabase';
 
 interface VisualizerProps {
   technique: BreathingTechnique;
   onClose: () => void;
+  darkMode: boolean;
+  onToggleDark: () => void;
 }
 
 type Phase = 'inhale' | 'hold1' | 'exhale' | 'hold2';
@@ -114,7 +116,7 @@ const generateParticles = (count: number, minRadius: number, maxRadius: number) 
   }));
 };
 
-export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) => {
+export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, darkMode, onToggleDark }) => {
   // 1. Critical Pattern Sanitization (must happen before any hooks or render logic)
   const safePattern = useMemo(() => {
     const p = { ...(technique?.pattern || { inhale: 4, hold1: 0, exhale: 4, hold2: 0 }) };
@@ -490,15 +492,16 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
 
   const saveJournalAndClose = () => {
     if (sessionTime > 0) {
+      const completedAt = getLocalDateTimeString();
       const sessionId = addSession({
-        date: getLocalDateString(),
+        date: completedAt,
         techniqueId: technique.id,
         techniqueName: technique.name,
         durationSeconds: sessionTime,
       });
 
       addJournalEntry({
-        date: getLocalDateString(),
+        date: completedAt,
         mood: sessionMood,
         note: sessionNote,
         sessionId
@@ -532,8 +535,9 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
     setPhase('inhale');
     setTimeLeft(technique.pattern.inhale);
     if (sessionTime > 0) {
+      const completedAt = getLocalDateTimeString();
       addSession({
-        date: getLocalDateString(),
+        date: completedAt,
         techniqueId: technique.id,
         techniqueName: technique.name,
         durationSeconds: sessionTime,
@@ -963,8 +967,17 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose }) =>
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
             className="absolute top-24 right-6 bg-white/95 dark:bg-[#2a2420]/95 backdrop-blur-md rounded-2xl p-6 shadow-2xl z-50 border border-[#E8DFC9] dark:border-white/10 w-80"
           >
-            <div className="flex justify-between items-center mb-6 pb-3 border-b border-[#F2EAE0] dark:border-white/10">
-              <h3 className="font-medium text-[#4A3C31] dark:text-[#F5EDE0] text-lg">Cài đặt</h3>
+            <div className="mb-6 flex items-center justify-between gap-3 border-b border-[#F2EAE0] pb-3 dark:border-white/10">
+              <div className="flex items-center gap-3">
+                <h3 className="text-lg font-medium text-[#4A3C31] dark:text-[#F5EDE0]">Cài đặt</h3>
+                <button
+                  className="inline-flex items-center gap-2 rounded-full border border-[#E8DFC9] bg-[#FCF9F3] px-3 py-1.5 text-xs font-medium text-[#5A4D41] transition-colors hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-[#DECAA4] dark:hover:bg-white/10"
+                  onClick={onToggleDark}
+                >
+                  {darkMode ? <SunMedium className="h-4 w-4" /> : <MoonStar className="h-4 w-4" />}
+                  {darkMode ? 'Sáng' : 'Tối'}
+                </button>
+              </div>
               <button className="cursor-pointer" onClick={() => setShowSettings(false)}>
                 <X className="w-6 h-6 text-[#C2A385] hover:text-[#8B7D6E]" />
               </button>

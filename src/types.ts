@@ -38,6 +38,37 @@ export interface Badge {
   icon?: string;
 }
 
+export interface DailyHistoryPoint {
+  label: string;
+  minutes: number;
+}
+
+export interface MeditationStats {
+  totalMinutes: number;
+  sessionCount: number;
+  monthlySessions: number;
+  totalDuration: number;
+  streak: number;
+  favoriteTechnique: string;
+  dailyHistory: DailyHistoryPoint[];
+  badges: Badge[];
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  full_name?: string;
+  updated_at?: string;
+}
+
+export interface SiteVisit {
+  id: string;
+  visitor_id: string;
+  user_id?: string | null;
+  page_path: string;
+  created_at: string;
+}
+
 export type VisualMode = 'cosmic' | 'sacred' | 'garden';
 
 export type MalaMaterial = 'agarwood' | 'jade' | 'tiger_eye';

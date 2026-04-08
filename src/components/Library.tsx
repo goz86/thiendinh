@@ -1,17 +1,45 @@
 import React from 'react';
 import { techniques } from '../data';
-import { Wind, Moon, Brain, ChevronRight, Plus, Heart, Zap, Leaf, Snowflake, Flame, CloudMoon, BarChart3, Sun, MoonIcon, User, Shield, Bell, Disc, MessageSquare } from 'lucide-react';
-import type { BreathingTechnique } from '../types';
+import {
+  Wind,
+  Moon,
+  Brain,
+  ChevronRight,
+  Plus,
+  Heart,
+  Zap,
+  Leaf,
+  Snowflake,
+  Flame,
+  CloudMoon,
+  BarChart3,
+  Sun,
+  MoonIcon,
+  User,
+  Shield,
+  Bell,
+  Disc,
+  MessageSquare,
+  Sparkles,
+  PenLine,
+  Check,
+  Flower2,
+  Cloud,
+  CloudRain,
+  BrainCircuit,
+  BedSingle,
+} from 'lucide-react';
+import type { BreathingTechnique, Mood } from '../types';
 import { getDailyQuote } from '../data/quotes';
-import { getStats, syncWithCloud } from '../utils/storage';
-import { ConfirmModal } from './ConfirmModal';
+import { addJournalEntry, getLocalDateTimeString, syncWithCloud } from '../utils/storage';
+import { getUserAvatar, getUserDisplayName, isAdminEmail } from '../utils/auth';
 
 interface LibraryProps {
   onSelect: (technique: BreathingTechnique) => void;
   onCustom: () => void;
   onStats: () => void;
   onAuth: () => void;
-  onLogout: () => void;
+  onProfile: () => void;
   onAdmin: () => void;
   onMala: () => void;
   onTempleTools: () => void;
@@ -22,131 +50,186 @@ interface LibraryProps {
 }
 
 const iconMap: Record<string, React.ReactNode> = {
-  box: <Brain className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
-  '478': <Moon className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
-  diaphragmatic: <Wind className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
-  resonant: <Heart className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
-  energizing: <Zap className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
-  calm: <Leaf className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
-  'wim-hof': <Snowflake className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
-  pranayama: <Flame className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
-  sleep: <CloudMoon className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
+  box: <Brain className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
+  '478': <Moon className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
+  diaphragmatic: <Wind className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
+  resonant: <Heart className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
+  energizing: <Zap className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
+  calm: <Leaf className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
+  'wim-hof': <Snowflake className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
+  pranayama: <Flame className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
+  sleep: <CloudMoon className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
 };
 
-export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, onAuth, onLogout, onAdmin, onMala, onTempleTools, onJournal, user, darkMode, onToggleDark }) => {
-  const [isLogoutModalOpen, setIsLogoutModalOpen] = React.useState(false);
-  const [stats, setStats] = React.useState(getStats());
+const moodOptions: Array<{ value: Mood; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { value: 'peaceful', label: 'Bình an', icon: Flower2 },
+  { value: 'calm', label: 'Êm dịu', icon: Leaf },
+  { value: 'neutral', label: 'Bình thường', icon: Cloud },
+  { value: 'tired', label: 'Hơi mệt', icon: BedSingle },
+  { value: 'anxious', label: 'Lo lắng', icon: BrainCircuit },
+  { value: 'sad', label: 'Chùng xuống', icon: CloudRain },
+];
+
+const cleanText = (value: string) =>
+  value
+    .replaceAll('沼?', 'ở')
+    .replaceAll('Th沼?', 'Thở')
+    .replaceAll('B챙nh', 'Bình')
+    .replaceAll('T칫nh', 'Tĩnh')
+    .replaceAll('Li챗n', 'Liên')
+    .replaceAll('Ti梳퓆', 'Tiến')
+    .replaceAll('Ti沼뇆', 'Tiện')
+    .replaceAll('챠ch', 'ích')
+    .replaceAll('h沼?tr沼?', 'hỗ trợ')
+    .replaceAll('L梳쬷', 'Lần')
+    .replaceAll('Chu沼뾦', 'chuỗi')
+    .replaceAll('Nh梳춗 K첵', 'Nhật ký')
+    .replaceAll('T梳죓', 'Tạo')
+    .replaceAll('Ri챗ng', 'riêng')
+    .replaceAll('thi沼걆', 'thiền')
+    .replaceAll('Th沼?H沼셮', 'Thở Hộp')
+    .replaceAll('Th沼?B沼쩸g', 'Thở Bụng')
+    .replaceAll('C퉤 ho횪nh', 'Cơ hoành')
+    .replaceAll('Th沼?C沼셬g H튼沼웢g', 'Thở Cộng Hưởng')
+    .replaceAll('Th沼?N훱ng L튼沼즢g', 'Thở Năng Lượng')
+    .replaceAll('Th沼?T칫nh L梳톘g (2-1)', 'Thở Tĩnh Lặng (2-1)')
+    .replaceAll('Th沼?V횪o Gi梳쩭 Ng沼?', 'Thở Vào Giấc Ngủ')
+    .replaceAll('Gi첬p ng沼?ngon', 'Giúp ngủ ngon')
+    .replaceAll('Th튼 gi찾n s창u', 'Thư giãn sâu')
+    .replaceAll('Xoa d沼땥 stress', 'Xoa dịu stress')
+    .replaceAll('Ng沼?s창u', 'Ngủ sâu')
+    .replaceAll('T훱ng n훱ng l튼沼즢g', 'Tăng năng lượng')
+    .replaceAll('C창n b梳켷g n훱ng l튼沼즢g', 'Cân bằng năng lượng')
+    .replaceAll('Gi梳즡 lo 창u', 'Giảm lo âu')
+    .replaceAll('T梳춑 trung & B챙nh t칫nh', 'Tập trung & Bình tĩnh');
+
+export const Library: React.FC<LibraryProps> = ({
+  onSelect,
+  onCustom,
+  onStats,
+  onAuth,
+  onProfile,
+  onAdmin,
+  onMala,
+  onTempleTools,
+  onJournal,
+  user,
+  darkMode,
+  onToggleDark,
+}) => {
+  const [quickMood, setQuickMood] = React.useState<Mood>('peaceful');
+  const [quickNote, setQuickNote] = React.useState('');
+  const [quickSaved, setQuickSaved] = React.useState(false);
   const quote = getDailyQuote();
+  const userName = getUserDisplayName(user);
+  const userAvatar = getUserAvatar(user);
 
   React.useEffect(() => {
-    setStats(getStats());
-    
     if (user) {
-      syncWithCloud().then((updated) => {
-        if (updated) {
-          setStats(getStats());
-        }
-      });
+      syncWithCloud();
     }
   }, [user]);
 
+  React.useEffect(() => {
+    if (!quickSaved) return undefined;
+    const timer = window.setTimeout(() => setQuickSaved(false), 2500);
+    return () => window.clearTimeout(timer);
+  }, [quickSaved]);
+
+  const handleSaveQuickNote = () => {
+    const note = quickNote.trim();
+    if (!note) return;
+
+    addJournalEntry({
+      date: getLocalDateTimeString(new Date()),
+      mood: quickMood,
+      note,
+    });
+    setQuickNote('');
+    setQuickSaved(true);
+  };
+
   return (
-    <div className="min-h-screen p-6 max-w-4xl mx-auto pt-10 overflow-y-auto pb-20">
-      {/* Top bar */}
-      <div className="flex justify-between items-center mb-8 gap-3">
-        <button
-          onClick={onStats}
-          className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-[#E8DFC9] dark:border-white/10 rounded-full hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer shadow-sm"
-        >
-          <BarChart3 className="w-4 h-4 text-[#A37B5C] dark:text-[#DECAA4]" />
-          <span className="text-sm text-[#5A4D41] dark:text-[#F5EDE0] font-medium">{stats.monthlySessions} lần thiền trong tháng</span>
-          {stats.streak > 0 && (
-            <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-300 px-2 py-0.5 rounded-full font-medium">🔥 {stats.streak}</span>
-          )}
-        </button>
-        
-        <div className="flex gap-2">
-          {user && user.email === 'heeffgh123@gmail.com' && (
+    <div className="mx-auto min-h-screen max-w-4xl overflow-y-auto px-4 pb-32 pt-8 sm:px-6 sm:pt-10">
+      <div className="mb-8 flex items-center justify-between gap-3">
+        <div className="ml-auto flex gap-2">
+          {user && isAdminEmail(user.email) && (
             <button
               onClick={onAdmin}
-              className="p-3 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-[#E8DFC9] dark:border-white/10 rounded-full hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer shadow-sm flex items-center justify-center"
+              className="flex items-center justify-center rounded-full border border-[#E8DFC9] bg-white/60 p-3 shadow-sm transition-all hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
               title="Quản trị hệ thống"
             >
-              <Shield className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
+              <Shield className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
             </button>
           )}
+
           <button
             onClick={() => {
-              if (user) {
-                setIsLogoutModalOpen(true);
-              } else {
-                onAuth();
-              }
+              if (user) onProfile();
+              else onAuth();
             }}
-            className={`p-3 backdrop-blur-md border rounded-full transition-all cursor-pointer shadow-sm relative group ${
-              user ? 'border-green-400/30 bg-green-50/40 dark:bg-green-900/10' : 'bg-white/60 dark:bg-white/5 border-[#E8DFC9] dark:border-white/10 hover:bg-white dark:hover:bg-white/10'
+            className={`relative border shadow-sm transition-all ${
+              user
+                ? 'flex items-center gap-3 rounded-full border-green-400/30 bg-green-50/40 px-4 py-2.5 dark:bg-green-900/10'
+                : 'rounded-full border-[#E8DFC9] bg-white/60 p-3 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10'
             }`}
-            title={user ? 'Đăng xuất' : 'Đăng nhập'}
+            title={user ? 'Hồ sơ người dùng' : 'Đăng nhập'}
           >
-            {user && (
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white dark:border-[#0d0b09] rounded-full" />
-            )}
+            {user && <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-white bg-green-500 dark:border-[#0d0b09]" />}
             {user ? (
-              <div className="w-5 h-5 flex items-center justify-center text-[10px] font-black text-green-700 dark:text-green-400 tracking-tighter">
-                {user.email?.split('@')[0].substring(0, 2).toUpperCase()}
-              </div>
+              <>
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-sm dark:bg-black/20">
+                  {userAvatar}
+                </div>
+                <span className="max-w-[120px] truncate text-sm font-medium text-[#4A3C31] dark:text-[#F5EDE0]">{userName}</span>
+              </>
             ) : (
-              <User className="w-5 h-5 text-[#A37B5C] dark:text-[#DECAA4]" />
+              <User className="h-5 w-5 text-[#A37B5C] dark:text-[#DECAA4]" />
             )}
           </button>
-          
+
           <button
             onClick={onToggleDark}
-            className="p-3 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-[#E8DFC9] dark:border-white/10 rounded-full hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer shadow-sm"
+            className="rounded-full border border-[#E8DFC9] bg-white/60 p-3 shadow-sm transition-all hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
           >
-            {darkMode ? <Sun className="w-5 h-5 text-amber-400" /> : <MoonIcon className="w-5 h-5 text-[#A37B5C]" />}
+            {darkMode ? <Sun className="h-5 w-5 text-amber-400" /> : <MoonIcon className="h-5 w-5 text-[#A37B5C]" />}
           </button>
         </div>
       </div>
 
-      {/* Header */}
       <div className="mb-8 text-center text-[#5A4D41] dark:text-[#F5EDE0]">
-        <Wind className="w-12 h-12 mx-auto text-[#C2A385] dark:text-[#DECAA4] mb-4" />
-        <h1 className="text-4xl font-normal mb-2">Hơi Thở Chánh Niệm</h1>
-        <p className="text-[#8B7D6E] dark:text-[#B0A090]">Chọn một bài tập thở để kết nối lại với tâm trí và cơ thể bạn.</p>
+        <Wind className="mx-auto mb-4 h-12 w-12 text-[#C2A385] dark:text-[#DECAA4]" />
+        <h1 className="mb-2 text-4xl font-normal">Hơi Thở Chánh Niệm</h1>
+        <p className="text-[#8B7D6E] dark:text-[#B0A090]">Chọn một bài thở để nuôi dưỡng tâm trí và cơ thể vững vàng.</p>
       </div>
 
-      <div className="mb-10" />
-
-      {/* Daily Quote */}
-      <div className="mb-10 mx-auto max-w-xl">
-        <div className="bg-white/50 dark:bg-white/5 backdrop-blur-md border border-[#E8DFC9] dark:border-white/10 rounded-2xl px-6 py-5 text-center shadow-sm">
-          <p className="text-sm text-[#5A4D41] dark:text-[#DECAA4] italic leading-relaxed">"{quote}"</p>
+      <div className="mx-auto mb-10 max-w-xl">
+        <div className="rounded-2xl border border-[#E8DFC9] bg-white/50 px-6 py-5 text-center shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-white/5">
+          <p className="text-sm italic leading-relaxed text-[#5A4D41] dark:text-[#DECAA4]">"{quote}"</p>
         </div>
       </div>
 
-      {/* Technique Grid */}
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-        {techniques.map(tech => (
+      <div id="library-techniques-start" className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        {techniques.map((tech) => (
           <button
             key={tech.id}
             onClick={() => onSelect(tech)}
-            className="group relative flex flex-col text-left p-6 bg-white/60 dark:bg-white/5 backdrop-blur-md hover:bg-white/90 dark:hover:bg-white/10 border border-[#E8DFC9] dark:border-white/10 rounded-2xl transition-all hover:-translate-y-1 shadow-[0_4px_20px_-4px_rgba(163,123,92,0.1)] hover:shadow-[0_8px_30px_-4px_rgba(163,123,92,0.2)] cursor-pointer"
+            className="group relative flex cursor-pointer flex-col rounded-2xl border border-[#E8DFC9] bg-white/60 p-6 text-left shadow-[0_4px_20px_-4px_rgba(163,123,92,0.1)] transition-all hover:-translate-y-1 hover:bg-white/90 hover:shadow-[0_8px_30px_-4px_rgba(163,123,92,0.2)] dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
           >
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl shadow-inner border border-[#F2EAE0] dark:border-white/5">
-                {iconMap[tech.id] || <Wind className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />}
+            <div className="mb-4 flex items-center justify-between">
+              <div className="rounded-xl border border-[#F2EAE0] bg-[#FCF9F3] p-3 shadow-inner dark:border-white/5 dark:bg-white/5">
+                {iconMap[tech.id] || <Wind className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />}
               </div>
-              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-[#FCF9F3] dark:bg-white/5 text-[#A37B5C] dark:text-[#DECAA4] border border-[#F2EAE0] dark:border-white/5">
-                {tech.benefit}
+              <span className="rounded-full border border-[#F2EAE0] bg-[#FCF9F3] px-3 py-1 text-xs font-semibold text-[#A37B5C] dark:border-white/5 dark:bg-white/5 dark:text-[#DECAA4]">
+                {cleanText(tech.benefit)}
               </span>
             </div>
-            
-            <h3 className="text-lg font-medium mb-2 text-[#4A3C31] dark:text-[#F5EDE0]">{tech.name}</h3>
-            <p className="text-sm text-[#8B7D6E] dark:text-[#B0A090] mb-5 flex-grow leading-relaxed">{tech.description}</p>
-            
-            <div className="flex items-center justify-between mt-auto">
-              <div className="flex space-x-1 text-xs text-[#C2A385] dark:text-[#DECAA4]/70 font-mono font-medium">
+
+            <h3 className="mb-2 text-lg font-medium text-[#4A3C31] dark:text-[#F5EDE0]">{cleanText(tech.name)}</h3>
+            <p className="mb-5 flex-grow text-sm leading-relaxed text-[#8B7D6E] dark:text-[#B0A090]">{cleanText(tech.description)}</p>
+
+            <div className="mt-auto flex items-center justify-between">
+              <div className="flex space-x-1 font-mono text-xs font-medium text-[#C2A385] dark:text-[#DECAA4]/70">
                 <span>{tech.pattern.inhale}</span>
                 <span>-</span>
                 <span>{tech.pattern.hold1}</span>
@@ -155,86 +238,140 @@ export const Library: React.FC<LibraryProps> = ({ onSelect, onCustom, onStats, o
                 <span>-</span>
                 <span>{tech.pattern.hold2}</span>
               </div>
-              <ChevronRight className="w-5 h-5 text-[#C2A385] dark:text-[#DECAA4]/50 group-hover:text-[#A37B5C] dark:group-hover:text-[#DECAA4] transition-colors" />
+              <ChevronRight className="h-5 w-5 text-[#C2A385] transition-colors group-hover:text-[#A37B5C] dark:text-[#DECAA4]/50 dark:group-hover:text-[#DECAA4]" />
             </div>
           </button>
         ))}
 
-        {/* Custom */}
         <button
           onClick={onCustom}
-          className="group relative flex flex-col text-left p-6 border-2 border-dashed border-[#DECAA4] dark:border-white/15 hover:border-[#A37B5C] dark:hover:border-[#DECAA4] rounded-2xl transition-all bg-white/20 dark:bg-white/[0.02] hover:bg-white/60 dark:hover:bg-white/5 cursor-pointer items-center justify-center min-h-[250px]"
+          className="group relative flex min-h-[250px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#DECAA4] bg-white/20 p-6 text-left transition-all hover:border-[#A37B5C] hover:bg-white/60 dark:border-white/15 dark:bg-white/[0.02] dark:hover:border-[#DECAA4] dark:hover:bg-white/5"
         >
-          <div className="p-4 bg-[#FCF9F3] dark:bg-white/5 rounded-full mb-4 group-hover:scale-110 transition-transform shadow-sm">
-            <Plus className="w-8 h-8 text-[#A37B5C] dark:text-[#DECAA4]" />
+          <div className="mb-4 rounded-full bg-[#FCF9F3] p-4 shadow-sm transition-transform group-hover:scale-110 dark:bg-white/5">
+            <Plus className="h-8 w-8 text-[#A37B5C] dark:text-[#DECAA4]" />
           </div>
-          <h3 className="text-lg font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Tạo Bài Tập Riêng</h3>
-          <p className="text-sm text-[#8B7D6E] dark:text-[#B0A090] mt-2 text-center">Thiết lập nhịp thở theo ý bạn</p>
+          <h3 className="text-lg font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Tạo bài thở riêng</h3>
+          <p className="mt-2 text-center text-sm text-[#8B7D6E] dark:text-[#B0A090]">Thiết lập nhịp thở theo ý bạn</p>
         </button>
       </div>
 
-      {/* Utilities Section */}
-      <div className="mt-16 mb-8 text-center sm:text-left">
-        <h2 className="text-xl font-medium text-[#4A3C31] dark:text-[#F5EDE0] mb-6 flex items-center justify-center sm:justify-start gap-2">
-          <Zap className="w-5 h-5 text-[#A37B5C]" />
-          Tiện ích bổ trợ
+      <div className="mb-8 mt-16 text-center sm:text-left">
+        <h2 className="mb-6 flex items-center justify-center gap-2 text-xl font-medium text-[#4A3C31] dark:text-[#F5EDE0] sm:justify-start">
+          <Zap className="h-5 w-5 text-[#A37B5C]" />
+          Tiện ích hỗ trợ
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <button
-            onClick={onTempleTools}
-            className="flex flex-col items-center p-5 bg-white/40 dark:bg-white/5 backdrop-blur-sm border border-[#E8DFC9] dark:border-white/10 rounded-2xl hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group"
-          >
-            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
-              <Bell className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
+
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <button onClick={onTempleTools} className="group flex flex-col items-center rounded-2xl border border-[#E8DFC9] bg-white/40 p-5 backdrop-blur-sm transition-all hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10">
+            <div className="mb-3 rounded-xl bg-[#FCF9F3] p-3 transition-transform group-hover:scale-110 dark:bg-white/5">
+              <Bell className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />
             </div>
-            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Chuông Mõ</span>
-          </button>
-          
-          <button
-            onClick={onMala}
-            className="flex flex-col items-center p-5 bg-white/40 dark:bg-white/5 backdrop-blur-sm border border-[#E8DFC9] dark:border-white/10 rounded-2xl hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group"
-          >
-            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
-              <Disc className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
-            </div>
-            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Lần Chuỗi Hạt</span>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Chuông mõ</span>
+            <span className="mt-1 text-center text-xs text-[#8B7D6E] dark:text-[#B0A090]">Gõ tay hoặc tự gõ theo nhịp</span>
           </button>
 
-          <button
-            onClick={onJournal}
-            className="flex flex-col items-center p-5 bg-white/40 dark:bg-white/5 backdrop-blur-sm border border-[#E8DFC9] dark:border-white/10 rounded-2xl hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group"
-          >
-            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
-              <MessageSquare className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
+          <button onClick={onMala} className="group flex flex-col items-center rounded-2xl border border-[#E8DFC9] bg-white/40 p-5 backdrop-blur-sm transition-all hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10">
+            <div className="mb-3 rounded-xl bg-[#FCF9F3] p-3 transition-transform group-hover:scale-110 dark:bg-white/5">
+              <Disc className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />
             </div>
-            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Nhật Ký</span>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Chuỗi hạt</span>
+            <span className="mt-1 text-center text-xs text-[#8B7D6E] dark:text-[#B0A090]">Có mục tiêu 27, 54, 108</span>
           </button>
-          
-          <button
-            onClick={onStats}
-            className="flex flex-col items-center p-5 bg-white/40 dark:bg-white/5 backdrop-blur-sm border border-[#E8DFC9] dark:border-white/10 rounded-2xl hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group"
-          >
-            <div className="p-3 bg-[#FCF9F3] dark:bg-white/5 rounded-xl mb-3 group-hover:scale-110 transition-transform">
-              <BarChart3 className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
+
+          <button onClick={onJournal} className="group flex flex-col items-center rounded-2xl border border-[#E8DFC9] bg-white/40 p-5 backdrop-blur-sm transition-all hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10">
+            <div className="mb-3 rounded-xl bg-[#FCF9F3] p-3 transition-transform group-hover:scale-110 dark:bg-white/5">
+              <MessageSquare className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />
             </div>
-            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Tiến Trình</span>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Nhật ký</span>
+            <span className="mt-1 text-center text-xs text-[#8B7D6E] dark:text-[#B0A090]">Xem lại cảm xúc và ghi chú</span>
+          </button>
+
+          <button onClick={onStats} className="group flex flex-col items-center rounded-2xl border border-[#E8DFC9] bg-white/40 p-5 backdrop-blur-sm transition-all hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10">
+            <div className="mb-3 rounded-xl bg-[#FCF9F3] p-3 transition-transform group-hover:scale-110 dark:bg-white/5">
+              <BarChart3 className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />
+            </div>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Tiến trình</span>
+            <span className="mt-1 text-center text-xs text-[#8B7D6E] dark:text-[#B0A090]">Xem chuỗi ngày và lịch sử gần đây</span>
           </button>
         </div>
       </div>
 
+      <div className="mb-12 rounded-[28px] border border-[#E8DFC9] bg-white/55 p-5 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-white/5">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="flex items-center gap-2 text-lg font-medium text-[#4A3C31] dark:text-[#F5EDE0]">
+              <PenLine className="h-5 w-5 text-[#A37B5C]" />
+              Ghi nhanh hôm nay
+            </h3>
+            <p className="mt-1 text-sm text-[#8B7D6E] dark:text-[#B0A090]">Viết vài dòng ngắn ngay tại đây, không cần mở riêng Nhật ký.</p>
+          </div>
+          <button
+            onClick={onJournal}
+            className="rounded-full bg-[#FCF4E7] px-3 py-1.5 text-xs font-medium text-[#A37B5C] transition-colors hover:bg-[#f7ead7] dark:bg-[#241d16] dark:text-[#DECAA4]"
+          >
+            Mở Nhật ký
+          </button>
+        </div>
 
-      <div className="text-center pb-32">
-        <p className="text-xs text-[#C2A385] dark:text-[#B0A090]/60">Thiền Định — © 2026 — goz ☁️</p>
+        <div className="mb-4 flex flex-wrap gap-2">
+          {moodOptions.map((mood) => (
+            <button
+              key={mood.value}
+              onClick={() => setQuickMood(mood.value)}
+              className={`rounded-full px-3 py-1.5 text-sm transition-all ${
+                quickMood === mood.value
+                  ? 'bg-[#5A4D41] text-white shadow-sm'
+                  : 'bg-[#FCF9F3] text-[#8B7D6E] hover:bg-white dark:bg-white/5 dark:text-[#DECAA4] dark:hover:bg-white/10'
+              }`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <mood.icon className="h-4 w-4" />
+                {mood.label}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+          <textarea
+            value={quickNote}
+            onChange={(event) => setQuickNote(event.target.value)}
+            placeholder="Ví dụ: Hôm nay mình thở chậm hơn và thấy đầu óc nhẹ hơn một chút."
+            rows={4}
+            className="w-full rounded-2xl border border-[#E8DFC9] bg-[#FCF9F3] px-4 py-3 text-sm text-[#4A3C31] outline-none transition-all focus:border-[#CDA178] focus:ring-2 focus:ring-[#EBD8C2] dark:border-white/10 dark:bg-white/5 dark:text-[#F5EDE0]"
+          />
+
+          <div className="flex flex-col justify-between gap-3">
+            <button
+              onClick={handleSaveQuickNote}
+              disabled={!quickNote.trim()}
+              className="inline-flex min-w-[160px] items-center justify-center gap-2 rounded-2xl bg-[#5A4D41] px-4 py-3 text-sm font-medium text-white shadow-sm transition-all hover:bg-[#4e4238] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Sparkles className="h-4 w-4" />
+              Lưu ghi chú
+            </button>
+
+            <div className={`rounded-2xl border px-4 py-3 text-sm transition-all ${
+              quickSaved
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-900/20 dark:text-emerald-300'
+                : 'border-[#E8DFC9] bg-[#FCF9F3] text-[#8B7D6E] dark:border-white/10 dark:bg-white/5 dark:text-[#B0A090]'
+            }`}>
+              {quickSaved ? (
+                <span className="inline-flex items-center gap-2">
+                  <Check className="h-4 w-4" />
+                  Đã thêm vào nhật ký của bạn
+                </span>
+              ) : (
+                'Ghi chú sẽ được lưu cùng thời gian local hiện tại.'
+              )}
+            </div>
+          </div>
+        </div>
       </div>
-      <ConfirmModal
-        isOpen={isLogoutModalOpen}
-        onClose={() => setIsLogoutModalOpen(false)}
-        onConfirm={onLogout}
-        title="Đăng xuất"
-        message="Bạn có chắc chắn muốn đăng xuất? Lịch sử thiền của bạn sẽ vẫn được lưu an toàn trên đám mây."
-        confirmText="Đăng xuất"
-        cancelText="Để sau"
-      />
+
+      <div className="pb-32 text-center">
+        <p className="text-xs text-[#C2A385] dark:text-[#B0A090]/60">Thiền định 2026</p>
+      </div>
     </div>
   );
 };
