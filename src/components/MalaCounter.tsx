@@ -48,7 +48,15 @@ const loadProgress = (): MalaProgress => {
 export const MalaCounter: React.FC<MalaCounterProps> = ({ onBack }) => {
   const [progress, setProgress] = useState<MalaProgress>(() => loadProgress());
   const [beads, setBeads] = useState<number[]>(BEAD_SOURCE);
+  const [pullOffset, setPullOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const gestureStateRef = useRef({
+    active: false,
+    pointerId: -1,
+    startY: 0,
+    moved: false,
+  });
 
   const { count, goal, material } = progress;
   const remaining = Math.max(goal - count, 0);
@@ -129,6 +137,76 @@ export const MalaCounter: React.FC<MalaCounterProps> = ({ onBack }) => {
     if ('vibrate' in navigator) navigator.vibrate([10, 50, 10]);
   };
 
+  const settleGesture = useCallback((clientY?: number) => {
+    const gesture = gestureStateRef.current;
+    if (!gesture.active) return;
+
+    const distance = Math.max(0, (clientY ?? gesture.startY) - gesture.startY);
+    const shouldAdvance = distance >= 44 || !gesture.moved;
+
+    gesture.active = false;
+    gesture.pointerId = -1;
+    gesture.startY = 0;
+    gesture.moved = false;
+
+    setIsDragging(false);
+    setPullOffset(0);
+
+    if (shouldAdvance) {
+      handleNext();
+    }
+  }, [handleNext]);
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    gestureStateRef.current = {
+      active: true,
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      moved: false,
+    };
+    setIsDragging(false);
+    setPullOffset(0);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = gestureStateRef.current;
+    if (!gesture.active || gesture.pointerId !== event.pointerId) return;
+
+    const deltaY = event.clientY - gesture.startY;
+    const nextOffset = Math.max(0, Math.min(deltaY, 140));
+    const moved = nextOffset > 6;
+
+    gesture.moved = moved;
+    setIsDragging(moved);
+    setPullOffset(nextOffset);
+  };
+
+  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (gestureStateRef.current.pointerId !== event.pointerId) return;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    settleGesture(event.clientY);
+  };
+
+  const handlePointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (gestureStateRef.current.pointerId !== event.pointerId) return;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    gestureStateRef.current.active = false;
+    gestureStateRef.current.pointerId = -1;
+    gestureStateRef.current.startY = 0;
+    gestureStateRef.current.moved = false;
+    setIsDragging(false);
+    setPullOffset(0);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#FCF9F3] dark:bg-[#0d0b09]">
       <div className="relative z-20 flex items-center justify-between p-6">
@@ -201,11 +279,18 @@ export const MalaCounter: React.FC<MalaCounterProps> = ({ onBack }) => {
 
       <div
         className="relative flex flex-1 cursor-pointer select-none flex-col items-center justify-center overflow-hidden touch-none"
-        onClick={handleNext}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
       >
         <div className="absolute left-1/2 h-full w-[2px] -translate-x-1/2 bg-[#A37B5C]/30 dark:bg-[#DECAA4]/20" />
 
-        <div className="flex flex-col items-center gap-6">
+        <motion.div
+          className="flex flex-col items-center gap-6"
+          animate={{ y: pullOffset, scale: isDragging ? 1.01 : 1 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 24, mass: 0.7 }}
+        >
           <AnimatePresence initial={false}>
             {beads.map((beadId, index) => (
               <motion.div
@@ -242,14 +327,18 @@ export const MalaCounter: React.FC<MalaCounterProps> = ({ onBack }) => {
               </motion.div>
             ))}
           </AnimatePresence>
-        </div>
+        </motion.div>
 
         {count > 0 && (
-          <div className="pointer-events-none absolute bottom-16">
+          <motion.div
+            className="pointer-events-none absolute bottom-16"
+            animate={{ y: pullOffset * 0.45 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 24, mass: 0.7 }}
+          >
             <div className="rounded-full bg-[#FCF9F3]/85 px-4 py-2 text-sm font-medium italic tracking-wide text-[#A37B5C] shadow-sm backdrop-blur-sm dark:bg-[#1a1612]/85 dark:text-[#DECAA4]">
               Nam Mô A Di Đà Phật
             </div>
-          </div>
+          </motion.div>
         )}
 
         {count >= goal && (

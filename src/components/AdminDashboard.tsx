@@ -37,6 +37,8 @@ interface AdminStats {
   recentSessions: RecentSession[];
 }
 
+const DUPLICATE_SESSION_WINDOW_MS = 90 * 1000;
+
 const EMPTY_STATS: AdminStats = {
   totalUsers: 0,
   totalSessions: 0,
@@ -55,6 +57,25 @@ const getLocalDateString = (date: Date) =>
 const parseLocalDateString = (value: string) => {
   const [year, month, day] = value.split('-').map(Number);
   return new Date(year, month - 1, day);
+};
+
+const dedupeRecentSessions = (sessions: RecentSession[]) => {
+  const sortedSessions = [...sessions].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+
+  return sortedSessions.filter((session, index, allSessions) => {
+    const sessionTimestamp = new Date(session.created_at).getTime();
+
+    return !allSessions.slice(0, index).some((previousSession) => {
+      if (previousSession.user_id !== session.user_id) return false;
+      if (previousSession.technique_name !== session.technique_name) return false;
+      if (previousSession.duration_seconds !== session.duration_seconds) return false;
+
+      const previousTimestamp = new Date(previousSession.created_at).getTime();
+      return Math.abs(previousTimestamp - sessionTimestamp) <= DUPLICATE_SESSION_WINDOW_MS;
+    });
+  });
 };
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
@@ -102,7 +123,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         return;
       }
 
-      const sessions = (data ?? []) as RecentSession[];
+      const sessions = dedupeRecentSessions((data ?? []) as RecentSession[]);
       let totalVisits = 0;
       let uniqueVisitors7d = 0;
       const uniqueUsers = new Set<string>();

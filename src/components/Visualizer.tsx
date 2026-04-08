@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, X, Volume2, VolumeX, ArrowLeft, Music, Maximize, Minimize, Mic, MicOff, Timer, RefreshCw, Sparkles, Flower, Wind, Send, MoonStar, SunMedium } from 'lucide-react';
 import type { BreathingTechnique, VisualMode, Mood } from '../types';
 import { addSession, addJournalEntry, getLocalDateTimeString } from '../utils/storage';
-import { supabase } from '../lib/supabase';
 
 interface VisualizerProps {
   technique: BreathingTechnique;
@@ -162,6 +161,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
   const bgAudioRef = useRef<HTMLAudioElement | null>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
+  const isPersistingSessionRef = useRef(false);
   const phaseStartRef = useRef(Date.now());
   const audioContextRef = useRef<AudioContext | null>(null);
   const oscillatorRef = useRef<OscillatorNode | null>(null);
@@ -490,72 +490,58 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
     }
   };
 
-  const saveJournalAndClose = () => {
+  const saveJournalAndClose = async () => {
+    if (isPersistingSessionRef.current) return;
+
     if (sessionTime > 0) {
-      const completedAt = getLocalDateTimeString();
-      const sessionId = addSession({
-        date: completedAt,
-        techniqueId: technique.id,
-        techniqueName: technique.name,
-        durationSeconds: sessionTime,
-      });
+      isPersistingSessionRef.current = true;
+      try {
+        const completedAt = getLocalDateTimeString();
+        const sessionId = await addSession({
+          date: completedAt,
+          techniqueId: technique.id,
+          techniqueName: technique.name,
+          durationSeconds: sessionTime,
+        });
 
-      addJournalEntry({
-        date: completedAt,
-        mood: sessionMood,
-        note: sessionNote,
-        sessionId
-      });
-
-      // Save to Supabase if logged in
-      const saveToCloud = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from('meditation_sessions').insert({
-            user_id: user.id,
-            technique_id: technique.id,
-            technique_name: technique.name,
-            duration_seconds: sessionTime
-          });
-        }
-      };
-      saveToCloud();
-      
-      // Reset and close
-      setSessionTime(0);
-      setShowJournalInput(false);
-      onClose();
+        await addJournalEntry({
+          date: completedAt,
+          mood: sessionMood,
+          note: sessionNote,
+          sessionId
+        });
+        
+        // Reset and close
+        setSessionTime(0);
+        setShowJournalInput(false);
+        onClose();
+      } finally {
+        isPersistingSessionRef.current = false;
+      }
     } else {
       onClose();
     }
   };
 
-  const resetTimer = () => {
+  const resetTimer = async () => {
+    if (isPersistingSessionRef.current) return;
+
     setAppState('idle');
     setPhase('inhale');
     setTimeLeft(technique.pattern.inhale);
     if (sessionTime > 0) {
-      const completedAt = getLocalDateTimeString();
-      addSession({
-        date: completedAt,
-        techniqueId: technique.id,
-        techniqueName: technique.name,
-        durationSeconds: sessionTime,
-      });
-
-      // Save to Supabase if logged in
-      const saveToCloud = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from('meditation_sessions').insert({
-            user_id: user.id,
-            technique_id: technique.id,
-            technique_name: technique.name,
-            duration_seconds: sessionTime
-          });
-        }
-      };
-      saveToCloud();
+      isPersistingSessionRef.current = true;
+      try {
+        const completedAt = getLocalDateTimeString();
+        await addSession({
+          date: completedAt,
+          techniqueId: technique.id,
+          techniqueName: technique.name,
+          durationSeconds: sessionTime,
+        });
+      } finally {
+        isPersistingSessionRef.current = false;
+      }
     }
     setSessionTime(0);
   };
@@ -1056,7 +1042,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
                   {[
                     { id: 'cosmic', icon: Sparkles, label: 'Vũ trụ' },
                     { id: 'sacred', icon: Flower, label: 'Mantra' },
-                    { id: 'garden', icon: Wind, label: 'Vườn Thiền' }
+                    { id: 'garden', icon: Wind, label: 'Bóng' }
                   ].map(mode => (
                     <button
                       key={mode.id}
@@ -1103,7 +1089,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
               <div className="flex items-center justify-between">
                 <span className="text-[15px] text-[#5A4D41] dark:text-[#F5EDE0] flex items-center gap-2 font-medium">
                   {soundEnabled ? <Volume2 className="w-5 h-5 text-[#A37B5C]"/> : <VolumeX className="w-5 h-5 text-[#C2A385]"/>}
-                  Tiếng chuông
+                  Tiếng chuông kết thúc
                 </span>
                 <button
                   onClick={() => setSoundEnabled(!soundEnabled)}
@@ -1131,7 +1117,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
               <div className="flex items-center justify-between">
                 <div className="pr-4">
                   <span className="text-[15px] font-medium text-[#5A4D41] dark:text-[#F5EDE0] block">Đảo ngược hiệu ứng</span>
-                  <span className="text-xs text-[#A37B5C] dark:text-[#DECAA4]">{reverseAnimation ? "Hít = Thu nhỏ" : "Hít = Khai mở"}</span>
+                  <span className="text-xs text-[#A37B5C] dark:text-[#DECAA4]">{reverseAnimation ? "Hít = Thu nhỏ" : "Hiệu ứng Hít và Thở"}</span>
                 </div>
                 <button
                   onClick={() => setReverseAnimation(!reverseAnimation)}
@@ -1342,12 +1328,12 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
           {appState === 'countdown' ? 'Đang chuẩn bị...' : isActive ? 'Tạm Dừng' : (sessionTime > 0 ? 'Tiếp Tục' : 'Bắt Đầu')}
         </button>
         <button
-          onClick={resetTimer}
+          onClick={handleFinish}
           className={`flex-1 max-w-[160px] sm:max-w-[200px] flex justify-center items-center py-4 bg-white/70 dark:bg-white/10 backdrop-blur-[2px] text-[#5A4D41] dark:text-[#DECAA4] border border-[#DECAA4] dark:border-white/10 rounded-full font-medium hover:bg-[#FCF9F3] dark:hover:bg-white/20 transition-all shadow-sm hover:shadow-md cursor-pointer text-lg whitespace-nowrap ${
             sessionTime > 0 ? 'opacity-100 flex-shrink-0' : 'hidden opacity-0 pointer-events-none'
           }`}
         >
-          Làm Mới
+          Kết Thúc
         </button>
       </div>
 
@@ -1403,13 +1389,13 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => { setShowJournalInput(false); resetTimer(); onClose(); }}
+                  onClick={() => { setShowJournalInput(false); void resetTimer(); onClose(); }}
                   className="flex-1 py-4 rounded-2xl text-[#8B7D6E] font-medium hover:bg-[#A37B5C]/5 transition-all cursor-pointer"
                 >
                   Bỏ qua
                 </button>
                 <button
-                  onClick={saveJournalAndClose}
+                  onClick={() => void saveJournalAndClose()}
                   className="flex-[2] py-4 bg-[#A37B5C] text-white rounded-2xl font-medium shadow-lg shadow-[#A37B5C]/20 hover:bg-[#8B7D6E] transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
                   <Send className="w-4 h-4" />

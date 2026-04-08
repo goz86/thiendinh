@@ -35,10 +35,19 @@ function App() {
   const [user, setUser] = useState<any>(null);
   const [activeTechnique, setActiveTechnique] = useState<BreathingTechnique | null>(null);
   const libraryScrollYRef = useRef(0);
+  const historyInitializedRef = useRef(false);
+  const applyingPopStateRef = useRef(false);
+  const lastHistoryKeyRef = useRef('');
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('mindful-dark-mode');
     return saved === 'true';
   });
+
+  type AppHistoryState = {
+    __mindfulApp: true;
+    view: View;
+    activeTechnique: BreathingTechnique | null;
+  };
 
   useEffect(() => {
     if (darkMode) {
@@ -91,6 +100,20 @@ function App() {
           console.error('Lỗi đăng ký Service Worker:', error);
         });
     }
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state as AppHistoryState | null;
+      if (!state || !state.__mindfulApp) return;
+
+      applyingPopStateRef.current = true;
+      setActiveTechnique(state.activeTechnique ?? null);
+      setView(state.view ?? 'library');
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   const saveLibraryScrollPosition = () => {
@@ -163,6 +186,38 @@ function App() {
     }
     return undefined;
   }, [view]);
+
+  useEffect(() => {
+    const historyState: AppHistoryState = {
+      __mindfulApp: true,
+      view,
+      activeTechnique,
+    };
+    const historyKey = JSON.stringify({
+      view,
+      activeTechniqueId: activeTechnique?.id ?? null,
+    });
+
+    if (!historyInitializedRef.current) {
+      window.history.replaceState(historyState, '', window.location.href);
+      historyInitializedRef.current = true;
+      lastHistoryKeyRef.current = historyKey;
+      return;
+    }
+
+    if (applyingPopStateRef.current) {
+      applyingPopStateRef.current = false;
+      lastHistoryKeyRef.current = historyKey;
+      return;
+    }
+
+    if (lastHistoryKeyRef.current === historyKey) {
+      return;
+    }
+
+    window.history.pushState(historyState, '', window.location.href);
+    lastHistoryKeyRef.current = historyKey;
+  }, [view, activeTechnique]);
 
   useEffect(() => {
     trackSiteVisit(user?.id ?? null, window.location.pathname);

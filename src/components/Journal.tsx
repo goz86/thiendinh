@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Calendar as CalendarIcon, MessageSquare, Trash2, Search } from 'lucide-react';
 import type { JournalEntry, Mood } from '../types';
-import { deleteJournalEntry, formatStoredDate, loadJournalEntries, parseStoredDate } from '../utils/storage';
+import { deleteJournalEntry, formatStoredDate, loadJournalEntries, parseStoredDate, syncWithCloud } from '../utils/storage';
 
 interface JournalProps {
   onBack: () => void;
@@ -31,13 +31,18 @@ export const Journal: React.FC<JournalProps> = ({ onBack }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const data = loadJournalEntries();
-    setEntries(data.sort((a, b) => parseStoredDate(b.date).getTime() - parseStoredDate(a.date).getTime()));
+    const loadData = async () => {
+      await syncWithCloud();
+      const data = loadJournalEntries();
+      setEntries(data.sort((a, b) => parseStoredDate(b.date).getTime() - parseStoredDate(a.date).getTime()));
+    };
+
+    void loadData();
   }, []);
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc muốn xóa ghi chú này?')) {
-      deleteJournalEntry(id);
+      await deleteJournalEntry(id);
       setEntries((prev) => prev.filter((entry) => entry.id !== id));
     }
   };
@@ -107,7 +112,7 @@ export const Journal: React.FC<JournalProps> = ({ onBack }) => {
                       </div>
                     </div>
                     <button
-                      onClick={() => handleDelete(entry.id)}
+                      onClick={() => void handleDelete(entry.id)}
                       className="p-2 opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-full cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />

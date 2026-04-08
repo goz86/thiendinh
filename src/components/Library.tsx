@@ -20,7 +20,6 @@ import {
   Bell,
   Disc,
   MessageSquare,
-  Sparkles,
   PenLine,
   Check,
   Flower2,
@@ -63,11 +62,11 @@ const iconMap: Record<string, React.ReactNode> = {
 
 const moodOptions: Array<{ value: Mood; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { value: 'peaceful', label: 'Bình an', icon: Flower2 },
-  { value: 'calm', label: 'Êm dịu', icon: Leaf },
+  { value: 'calm', label: 'lắng động', icon: Leaf },
   { value: 'neutral', label: 'Bình thường', icon: Cloud },
   { value: 'tired', label: 'Hơi mệt', icon: BedSingle },
   { value: 'anxious', label: 'Lo lắng', icon: BrainCircuit },
-  { value: 'sad', label: 'Chùng xuống', icon: CloudRain },
+  { value: 'sad', label: 'Không vui', icon: CloudRain },
 ];
 
 const cleanText = (value: string) =>
@@ -136,11 +135,11 @@ export const Library: React.FC<LibraryProps> = ({
     return () => window.clearTimeout(timer);
   }, [quickSaved]);
 
-  const handleSaveQuickNote = () => {
+  const handleSaveQuickNote = async () => {
     const note = quickNote.trim();
     if (!note) return;
 
-    addJournalEntry({
+    await addJournalEntry({
       date: getLocalDateTimeString(new Date()),
       mood: quickMood,
       note,
@@ -258,7 +257,7 @@ export const Library: React.FC<LibraryProps> = ({
       <div className="mb-8 mt-16 text-center sm:text-left">
         <h2 className="mb-6 flex items-center justify-center gap-2 text-xl font-medium text-[#4A3C31] dark:text-[#F5EDE0] sm:justify-start">
           <Zap className="h-5 w-5 text-[#A37B5C]" />
-          Tiện ích hỗ trợ
+          Tiện ích
         </h2>
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -266,7 +265,7 @@ export const Library: React.FC<LibraryProps> = ({
             <div className="mb-3 rounded-xl bg-[#FCF9F3] p-3 transition-transform group-hover:scale-110 dark:bg-white/5">
               <Bell className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />
             </div>
-            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Chuông mõ</span>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Gõ mõ</span>
             <span className="mt-1 text-center text-xs text-[#8B7D6E] dark:text-[#B0A090]">Gõ tay hoặc tự gõ theo nhịp</span>
           </button>
 
@@ -290,7 +289,7 @@ export const Library: React.FC<LibraryProps> = ({
             <div className="mb-3 rounded-xl bg-[#FCF9F3] p-3 transition-transform group-hover:scale-110 dark:bg-white/5">
               <BarChart3 className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />
             </div>
-            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Tiến trình</span>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Thành tích</span>
             <span className="mt-1 text-center text-xs text-[#8B7D6E] dark:text-[#B0A090]">Xem chuỗi ngày và lịch sử gần đây</span>
           </button>
         </div>
@@ -301,7 +300,7 @@ export const Library: React.FC<LibraryProps> = ({
           <div>
             <h3 className="flex items-center gap-2 text-lg font-medium text-[#4A3C31] dark:text-[#F5EDE0]">
               <PenLine className="h-5 w-5 text-[#A37B5C]" />
-              Ghi nhanh hôm nay
+              Tâm trạng của bạn hôm nay như thế nào?
             </h3>
             <p className="mt-1 text-sm text-[#8B7D6E] dark:text-[#B0A090]">Viết vài dòng ngắn ngay tại đây, không cần mở riêng Nhật ký.</p>
           </div>
@@ -347,7 +346,7 @@ export const Library: React.FC<LibraryProps> = ({
               disabled={!quickNote.trim()}
               className="inline-flex min-w-[160px] items-center justify-center gap-2 rounded-2xl bg-[#5A4D41] px-4 py-3 text-sm font-medium text-white shadow-sm transition-all hover:bg-[#4e4238] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Sparkles className="h-4 w-4" />
+              
               Lưu ghi chú
             </button>
 
@@ -362,7 +361,7 @@ export const Library: React.FC<LibraryProps> = ({
                   Đã thêm vào nhật ký của bạn
                 </span>
               ) : (
-                'Ghi chú sẽ được lưu cùng thời gian local hiện tại.'
+                'Ghi chú sẽ được lưu'
               )}
             </div>
           </div>
@@ -370,7 +369,7 @@ export const Library: React.FC<LibraryProps> = ({
       </div>
 
       <div className="pb-32 text-center">
-        <p className="text-xs text-[#C2A385] dark:text-[#B0A090]/60">Thiền định 2026</p>
+        <p className="text-xs text-[#C2A385] dark:text-[#B0A090]/60">- Bình an và biết ơn -</p>
       </div>
     </div>
   );
