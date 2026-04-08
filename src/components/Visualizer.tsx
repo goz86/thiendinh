@@ -14,6 +14,14 @@ interface VisualizerProps {
 type Phase = 'inhale' | 'hold1' | 'exhale' | 'hold2';
 type AppState = 'idle' | 'countdown' | 'breathing';
 
+type ControlTourStepKey = 'settings' | 'fullscreen' | 'music' | 'voice' | 'reverse';
+
+type ControlTourStep = {
+  key: ControlTourStepKey;
+  title: string;
+  description: string;
+};
+
 const phaseText: Record<Phase, string> = {
   inhale: 'Hít vào',
   hold1: 'Giữ hơi',
@@ -102,6 +110,36 @@ const durationPresets = [
   { value: 20, label: '20 phút' },
 ];
 
+const VISUALIZER_CONTROLS_TOUR_KEY = 'mindful-visualizer-controls-tour-seen';
+
+const controlTourSteps: ControlTourStep[] = [
+  {
+    key: 'settings',
+    title: 'Cài đặt',
+    description: 'Mở bảng tùy chỉnh để đổi thời gian thiền, chế độ hiển thị và các tùy chọn bổ trợ.',
+  },
+  {
+    key: 'fullscreen',
+    title: 'Toàn màn hình',
+    description: 'Bật chế độ tập trung để ẩn bớt chi tiết và giữ sự chú ý vào hơi thở.',
+  },
+  {
+    key: 'music',
+    title: 'Âm nhạc',
+    description: 'Chọn nhanh nhạc nền hoặc tần số để tạo không gian thư giãn phù hợp.',
+  },
+  {
+    key: 'voice',
+    title: 'Giọng hướng dẫn',
+    description: 'Bật hoặc tắt giọng hướng dẫn để theo nhịp thở dễ hơn.',
+  },
+  {
+    key: 'reverse',
+    title: 'Đảo hiệu ứng',
+    description: 'Đảo chiều chuyển động hình cầu nếu bạn muốn kiểu mô phỏng hít thở khác.',
+  },
+];
+
 const generateParticles = (count: number, minRadius: number, maxRadius: number) => {
   return Array.from({ length: count }).map((_, i) => ({
     id: i,
@@ -146,6 +184,8 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
   const [customMusicList, setCustomMusicList] = useState<{id: string, label: string}[]>([]);
   const [bgVolume, setBgVolume] = useState(0.5);
   const [visualMode, setVisualMode] = useState<VisualMode>('cosmic');
+  const [showControlsTour, setShowControlsTour] = useState(false);
+  const [controlsTourStep, setControlsTourStep] = useState(0);
   
   // Mobile detection for performance
   const isMobile = useMemo(() => {
@@ -167,6 +207,13 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
   const oscillatorRef = useRef<OscillatorNode | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const currentMusicSrc = useRef('');
+  const controlButtonRefs = useRef<Record<ControlTourStepKey, HTMLButtonElement | null>>({
+    settings: null,
+    fullscreen: null,
+    music: null,
+    voice: null,
+    reverse: null,
+  });
   const inhaleAudioRef = useRef<HTMLAudioElement | null>(null);
   const exhaleAudioRef = useRef<HTMLAudioElement | null>(null);
   const holdAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -176,6 +223,26 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
   const layer3 = useMemo(() => generateParticles(isMobile ? 20 : 60, 150, 600), [isMobile]);
 
   const isActive = appState === 'breathing';
+  const activeControlTourStep = controlTourSteps[controlsTourStep];
+  const activeControlButtonRect = activeControlTourStep
+    ? controlButtonRefs.current[activeControlTourStep.key]?.getBoundingClientRect() ?? null
+    : null;
+  const controlTourCardStyle = activeControlButtonRect
+    ? {
+        top: isMobile
+          ? 96
+          : Math.min(
+              Math.max(activeControlButtonRect.top - 10, 20),
+              Math.max(window.innerHeight - 220, 20)
+            ),
+        left: isMobile
+          ? 16
+          : activeControlButtonRect.left > 320
+            ? Math.max(activeControlButtonRect.left - 320, 16)
+            : Math.min(activeControlButtonRect.right + 16, Math.max(window.innerWidth - 296, 16)),
+        right: isMobile ? 16 : 'auto',
+      }
+    : { top: 24, left: 24 };
 
   // Audio initialization and pattern sanitization
   useEffect(() => {
@@ -196,6 +263,45 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
       setTimeLeft(safePattern.inhale);
     }
   }, [technique, appState]);
+
+  useEffect(() => {
+    if (zenMode) {
+      setShowControlsTour(false);
+      return;
+    }
+
+    if (localStorage.getItem(VISUALIZER_CONTROLS_TOUR_KEY) === 'true') return;
+
+    const timer = window.setTimeout(() => {
+      setShowControlsTour(true);
+      setControlsTourStep(0);
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [zenMode]);
+
+  useEffect(() => {
+    if (!showControlsTour) return;
+    setShowSettings(false);
+    setShowMusicPicker(false);
+  }, [showControlsTour]);
+
+  const finishControlsTour = useCallback(() => {
+    localStorage.setItem(VISUALIZER_CONTROLS_TOUR_KEY, 'true');
+    setShowControlsTour(false);
+    setControlsTourStep(0);
+  }, []);
+
+  const goToNextControlsTourStep = useCallback(() => {
+    setControlsTourStep((currentStep) => {
+      if (currentStep >= controlTourSteps.length - 1) {
+        finishControlsTour();
+        return currentStep;
+      }
+
+      return currentStep + 1;
+    });
+  }, [finishControlsTour]);
 
   const stopOscillator = useCallback(() => {
     if (oscillatorRef.current && gainNodeRef.current && audioContextRef.current) {
@@ -803,18 +909,21 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
             <div className="flex-1 flex justify-end relative z-10 mt-16 sm:mt-0">
               <div className="flex flex-col gap-2">
               <button
+                ref={(node) => { controlButtonRefs.current.settings = node; }}
                 onClick={() => setShowSettings(!showSettings)}
                 className="p-3 bg-white/50 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 shadow-sm rounded-full transition-all cursor-pointer border border-[#E8DFC9] dark:border-white/10"
               >
                 <Settings className="w-6 h-6 text-[#A37B5C] dark:text-[#DECAA4]" />
               </button>
               <button
+                ref={(node) => { controlButtonRefs.current.fullscreen = node; }}
                 onClick={toggleZenMode}
                 className="p-3 bg-white/50 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 shadow-sm rounded-full transition-all cursor-pointer border border-[#E8DFC9] dark:border-white/10"
               >
                 <Maximize className="w-5 h-5 text-[#A37B5C] dark:text-[#DECAA4]" />
               </button>
               <button
+                ref={(node) => { controlButtonRefs.current.music = node; }}
                 onClick={() => setShowMusicPicker(!showMusicPicker)}
                 className={`p-3 shadow-sm rounded-full transition-all cursor-pointer border ${
                   bgMusic !== 'none'
@@ -825,6 +934,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
                 <Music className={`w-5 h-5 ${bgMusic !== 'none' ? 'text-[#5A4D41] dark:text-[#DECAA4]' : 'text-[#A37B5C] dark:text-[#DECAA4]'}`} />
               </button>
               <button
+                ref={(node) => { controlButtonRefs.current.voice = node; }}
                 onClick={() => setVoiceEnabled(!voiceEnabled)}
                 className={`p-3 shadow-sm rounded-full transition-all cursor-pointer border ${
                   voiceEnabled
@@ -836,6 +946,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
                 {voiceEnabled ? <Mic className="w-5 h-5 text-[#5A4D41] dark:text-[#DECAA4]" /> : <MicOff className="w-5 h-5 text-[#A37B5C] dark:text-[#DECAA4]" />}
               </button>
               <button
+                ref={(node) => { controlButtonRefs.current.reverse = node; }}
                 onClick={() => setReverseAnimation(!reverseAnimation)}
                 className={`p-3 shadow-sm rounded-full transition-all cursor-pointer border ${
                   reverseAnimation
@@ -849,6 +960,90 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
             </div>
           </div>
         </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showControlsTour && activeControlTourStep && activeControlButtonRect && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[70] bg-[rgba(91,77,65,0.22)] backdrop-blur-[2px]"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="fixed z-[71] rounded-full border-2 border-[#F7E7CF] shadow-[0_0_0_9999px_rgba(91,77,65,0.22)]"
+              style={{
+                top: activeControlButtonRect.top - 6,
+                left: activeControlButtonRect.left - 6,
+                width: activeControlButtonRect.width + 12,
+                height: activeControlButtonRect.height + 12,
+              }}
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              className="fixed z-[72] w-[min(320px,calc(100vw-32px))] rounded-[26px] border border-[#E3D3BC] bg-[rgba(252,249,243,0.97)] p-4 text-[#4A3C31] shadow-[0_24px_60px_rgba(91,77,65,0.18)] backdrop-blur-xl sm:w-[280px] sm:p-5"
+              style={controlTourCardStyle}
+            >
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#A37B5C] sm:text-[12px]">
+                  <Sparkles className="h-4 w-4" />
+                  {controlsTourStep + 1} / {controlTourSteps.length}
+                </div>
+                <button
+                  onClick={finishControlsTour}
+                  className="rounded-full p-1 text-[#A37B5C] transition-colors hover:bg-[#F6EFE4] hover:text-[#5A4D41]"
+                  aria-label="Đóng hướng dẫn"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <h3 className="text-lg font-semibold text-[#4A3C31] sm:text-xl">{activeControlTourStep.title}</h3>
+              <p className="mt-2.5 text-sm leading-6 text-[#6F6153] sm:mt-3">{activeControlTourStep.description}</p>
+
+              <div className="mt-4 flex items-center gap-2 sm:mt-5">
+                {controlTourSteps.map((step, index) => (
+                  <span
+                    key={step.key}
+                    className={`h-2 rounded-full transition-all ${
+                      index === controlsTourStep ? 'w-6 bg-[#CDA178]' : 'w-2 bg-[#DCCDBA]'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <div className="mt-5 flex items-end justify-between gap-3 sm:mt-6">
+                <button
+                  onClick={() => setControlsTourStep((currentStep) => Math.max(currentStep - 1, 0))}
+                  disabled={controlsTourStep === 0}
+                  className="rounded-full px-3 py-2 text-sm font-medium text-[#8B7D6E] transition-all hover:bg-[#F6EFE4] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4"
+                >
+                  Quay lại
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={finishControlsTour}
+                    className="rounded-full px-3 py-2 text-sm font-medium text-[#8B7D6E] transition-all hover:bg-[#F6EFE4] sm:px-4"
+                  >
+                    Bỏ qua
+                  </button>
+                  <button
+                    onClick={goToNextControlsTourStep}
+                    className="rounded-full bg-[#5A4D41] px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-[#4A3C31] sm:px-5"
+                  >
+                    {controlsTourStep === controlTourSteps.length - 1 ? 'Xong' : 'Tiếp theo'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 

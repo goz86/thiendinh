@@ -62,7 +62,7 @@ const iconMap: Record<string, React.ReactNode> = {
 
 const moodOptions: Array<{ value: Mood; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { value: 'peaceful', label: 'Bình an', icon: Flower2 },
-  { value: 'calm', label: 'lắng động', icon: Leaf },
+  { value: 'calm', label: 'Hạnh phúc', icon: Leaf },
   { value: 'neutral', label: 'Bình thường', icon: Cloud },
   { value: 'tired', label: 'Hơi mệt', icon: BedSingle },
   { value: 'anxious', label: 'Lo lắng', icon: BrainCircuit },
@@ -265,7 +265,7 @@ export const Library: React.FC<LibraryProps> = ({
             <div className="mb-3 rounded-xl bg-[#FCF9F3] p-3 transition-transform group-hover:scale-110 dark:bg-white/5">
               <Bell className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />
             </div>
-            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Gõ mõ</span>
+            <span className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Gõ mõ, Tụng kinh</span>
             <span className="mt-1 text-center text-xs text-[#8B7D6E] dark:text-[#B0A090]">Gõ tay hoặc tự gõ theo nhịp</span>
           </button>
 
@@ -312,18 +312,18 @@ export const Library: React.FC<LibraryProps> = ({
           </button>
         </div>
 
-        <div className="mb-4 flex flex-wrap gap-2">
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           {moodOptions.map((mood) => (
             <button
               key={mood.value}
               onClick={() => setQuickMood(mood.value)}
-              className={`rounded-full px-3 py-1.5 text-sm transition-all ${
+              className={`min-h-[42px] rounded-full px-3 py-1.5 text-sm transition-all sm:min-h-0 ${
                 quickMood === mood.value
                   ? 'bg-[#5A4D41] text-white shadow-sm'
                   : 'bg-[#FCF9F3] text-[#8B7D6E] hover:bg-white dark:bg-white/5 dark:text-[#DECAA4] dark:hover:bg-white/10'
               }`}
             >
-              <span className="inline-flex items-center gap-2">
+              <span className="inline-flex items-center justify-center gap-2 sm:justify-start">
                 <mood.icon className="h-4 w-4" />
                 {mood.label}
               </span>
@@ -361,7 +361,7 @@ export const Library: React.FC<LibraryProps> = ({
                   Đã thêm vào nhật ký của bạn
                 </span>
               ) : (
-                'Ghi chú sẽ được lưu'
+                'Ghi chú lưu nhớ đọc lại nhé :))'
               )}
             </div>
           </div>
