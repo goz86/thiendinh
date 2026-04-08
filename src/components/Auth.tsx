@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Mail, Lock, LogIn, UserPlus, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { syncProfile } from '../utils/profile';
 
 interface AuthProps {
   onSuccess: () => void;
@@ -15,6 +16,17 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onBack }) => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
+  const getEmailRedirectUrl = () => {
+    const configuredUrl = import.meta.env.VITE_PUBLIC_SITE_URL?.trim();
+    if (configuredUrl) return configuredUrl;
+
+    if (typeof window !== 'undefined') {
+      return window.location.origin;
+    }
+
+    return undefined;
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -26,12 +38,27 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onBack }) => {
         if (error) throw error;
         onSuccess();
       } else {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: getEmailRedirectUrl(),
+          },
+        });
+
         if (error) throw error;
-        setMessage({ type: 'success', text: 'Kiểm tra email của bạn để xác nhận đăng ký!' });
+
+        if (data.user?.id && data.user.email) {
+          await syncProfile({
+            id: data.user.id,
+            email: data.user.email,
+          });
+        }
+
+        setMessage({ type: 'success', text: 'Kiem tra email cua ban de xac nhan dang ky!' });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Có lỗi xảy ra, thử lại sau.' });
+      setMessage({ type: 'error', text: error.message || 'Co loi xay ra, thu lai sau.' });
     } finally {
       setLoading(false);
     }
@@ -39,7 +66,7 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onBack }) => {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-b from-[#FCF9F3] to-[#F2EAE0] dark:from-[#1a1612] dark:to-[#0d0b09]">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md bg-white/70 dark:bg-white/5 backdrop-blur-xl p-8 rounded-3xl shadow-xl border border-[#DECAA4] dark:border-white/10"
@@ -53,10 +80,10 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onBack }) => {
 
         <div className="text-center mb-8">
           <h2 className="text-3xl font-semibold text-[#4A3C31] dark:text-[#F5EDE0]">
-            {isLogin ? 'Chào mừng trở lại' : 'Bắt đầu hành trình'}
+            {isLogin ? 'Chao mung tro lai' : 'Bat dau hanh trinh'}
           </h2>
           <p className="text-[#8B7D6E] dark:text-[#B0A090] mt-2">
-            {isLogin ? 'Đăng nhập để lưu lại lịch sử thiền' : 'Tạo tài khoản để đồng bộ dữ liệu'}
+            {isLogin ? 'Dang nhap de luu lai lich su thien' : 'Tao tai khoan de dong bo du lieu'}
           </p>
         </div>
 
@@ -65,7 +92,7 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onBack }) => {
             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#C2A385]" />
             <input
               type="email"
-              placeholder="Email của bạn"
+              placeholder="Email cua ban"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -77,7 +104,7 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onBack }) => {
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#C2A385]" />
             <input
               type="password"
-              placeholder="Mật khẩu"
+              placeholder="Mat khau"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -92,10 +119,16 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onBack }) => {
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 className={`p-4 rounded-xl flex items-start gap-3 ${
-                  message.type === 'error' ? 'bg-red-50 text-red-600 dark:bg-red-900/20' : 'bg-green-50 text-green-600 dark:bg-green-900/20'
+                  message.type === 'error'
+                    ? 'bg-red-50 text-red-600 dark:bg-red-900/20'
+                    : 'bg-green-50 text-green-600 dark:bg-green-900/20'
                 }`}
               >
-                {message.type === 'error' ? <AlertCircle className="w-5 h-5 shrink-0" /> : <CheckCircle2 className="w-5 h-5 shrink-0" />}
+                {message.type === 'error' ? (
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="w-5 h-5 shrink-0" />
+                )}
                 <p className="text-sm">{message.text}</p>
               </motion.div>
             )}
@@ -110,11 +143,11 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onBack }) => {
               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : isLogin ? (
               <>
-                <LogIn className="w-5 h-5" /> Đăng Nhập
+                <LogIn className="w-5 h-5" /> Dang Nhap
               </>
             ) : (
               <>
-                <UserPlus className="w-5 h-5" /> Đăng Ký
+                <UserPlus className="w-5 h-5" /> Dang Ky
               </>
             )}
           </button>
@@ -128,7 +161,7 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onBack }) => {
             }}
             className="text-[#A37B5C] hover:text-[#5A4D41] font-medium transition-colors"
           >
-            {isLogin ? 'Chưa có tài khoản? Đăng ký ngay' : 'Đã có tài khoản? Đăng nhập'}
+            {isLogin ? 'Chua co tai khoan? Dang ky ngay' : 'Da co tai khoan? Dang nhap'}
           </button>
         </div>
       </motion.div>

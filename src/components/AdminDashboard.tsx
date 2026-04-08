@@ -109,18 +109,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
       setIsAdmin(true);
 
-      const { data, error } = await supabase
-        .from('meditation_sessions')
-        .select('*, profiles(email)')
-        .order('created_at', { ascending: false });
+      const [
+        { data: sessionRows, error: sessionsError },
+        { count: profilesCount, error: profilesError },
+      ] = await Promise.all([
+        supabase
+          .from('meditation_sessions')
+          .select('*, profiles(email)')
+          .order('created_at', { ascending: false }),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }),
+      ]);
+      const data = sessionRows;
+      const error = sessionsError ?? { code: 'unknown' };
 
-      if (error) {
-        console.error('Error fetching admin stats:', error);
+      if (sessionsError) {
+        console.error('Error fetching admin stats:', sessionsError);
         setErrorMessage(
           `Không thể truy cập dữ liệu quản trị lúc này (mã lỗi: ${error.code}). Hãy kiểm tra lại quyền RLS và quan hệ với bảng profiles.`
         );
         setLoading(false);
         return;
+      }
+
+      if (profilesError) {
+        console.warn('KhÃ´ng thá»ƒ Ä‘áº¿m profiles, sáº½ fallback theo meditation_sessions:', profilesError);
       }
 
       const sessions = dedupeRecentSessions((data ?? []) as RecentSession[]);
@@ -170,7 +182,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       });
 
       setStats({
-        totalUsers: uniqueUsers.size,
+        totalUsers: profilesCount ?? uniqueUsers.size,
         totalSessions: sessions.length,
         totalMinutes,
         avgDuration: sessions.length > 0 ? Math.round(totalMinutes / sessions.length) : 0,
@@ -246,24 +258,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   return (
     <div className="min-h-screen bg-[#FDFCF9] dark:bg-[#0D0B09] transition-colors duration-500">
-      <div className="max-w-6xl mx-auto p-6 pt-12 pb-24">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
-          <div className="flex items-center gap-4">
+      <div className="max-w-6xl mx-auto px-4 pb-16 pt-8 sm:px-6 sm:pb-24 sm:pt-12">
+        <div className="mb-8 flex flex-col gap-4 sm:mb-12 md:flex-row md:items-center md:justify-between md:gap-6">
+          <div className="flex items-start gap-3 sm:items-center sm:gap-4">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={onBack}
-              className="p-3 bg-white dark:bg-white/5 shadow-sm rounded-2xl border border-[#E8DFC9] dark:border-white/10"
+              className="rounded-2xl border border-[#E8DFC9] bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
             >
               <ArrowLeft className="w-5 h-5 text-indigo-500" />
             </motion.button>
-            <div>
-              <h1 className="text-3xl font-bold text-[#4A3C31] dark:text-[#F5EDE0]">Quản Trị Hệ Thống</h1>
-              <p className="text-[#8B7D6E] dark:text-[#B0A090]">Theo dõi người dùng, phiên thiền và xu hướng sử dụng.</p>
+            <div className="min-w-0">
+              <h1 className="text-[2rem] font-bold leading-tight text-[#4A3C31] dark:text-[#F5EDE0] sm:text-3xl">Quản Trị Hệ Thống</h1>
+              <p className="mt-1 max-w-xl text-sm leading-6 text-[#8B7D6E] dark:text-[#B0A090] sm:text-base">Theo dõi người dùng, phiên thiền và xu hướng sử dụng.</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-500/20">
+          <div className="flex items-center gap-3 self-start rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-2 dark:border-indigo-500/20 dark:bg-indigo-900/20 md:self-auto">
             <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
             <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400">Hệ thống đang hoạt động</span>
           </div>
@@ -279,8 +291,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
             <p className="text-[#8B7D6E] dark:text-[#B0A090] animate-pulse">Đang tải dữ liệu quản trị...</p>
           </div>
         ) : (
-          <div className="space-y-8">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="space-y-6 sm:space-y-8">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
               {[
                 { label: 'Tổng người dùng', value: stats.totalUsers, icon: Users },
                 { label: 'Tổng phiên thiền', value: stats.totalSessions, icon: Activity },
@@ -294,31 +306,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.08 }}
-                  className="bg-white dark:bg-white/5 p-6 rounded-3xl border border-[#E8DFC9] dark:border-white/10 shadow-sm"
+                  className="rounded-[26px] border border-[#E8DFC9] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5 sm:p-6"
                 >
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center mb-4">
-                    <item.icon className="w-6 h-6 text-indigo-500" />
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 sm:mb-4 sm:h-12 sm:w-12">
+                    <item.icon className="h-5 w-5 text-indigo-500 sm:h-6 sm:w-6" />
                   </div>
-                  <div className="text-3xl font-bold text-[#4A3C31] dark:text-[#F5EDE0]">{item.value}</div>
-                  <div className="text-sm text-[#8B7D6E] dark:text-[#B0A090] mt-1">{item.label}</div>
+                  <div className="text-[2rem] font-bold leading-none text-[#4A3C31] dark:text-[#F5EDE0] sm:text-3xl">{item.value}</div>
+                  <div className="mt-2 text-xs leading-5 text-[#8B7D6E] dark:text-[#B0A090] sm:mt-1 sm:text-sm">{item.label}</div>
                 </motion.div>
               ))}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 gap-4 sm:gap-8 lg:grid-cols-3">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="lg:col-span-2 bg-white dark:bg-white/5 p-8 rounded-3xl border border-[#E8DFC9] dark:border-white/10 shadow-sm"
+                className="rounded-3xl border border-[#E8DFC9] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5 sm:p-8 lg:col-span-2"
               >
-                <div className="flex items-center justify-between mb-8">
+                <div className="mb-5 flex items-center justify-between sm:mb-8">
                   <h3 className="text-lg font-bold flex items-center gap-2">
                     <Calendar className="w-5 h-5 text-indigo-500" />
                     Lượt thiền 7 ngày qua
                   </h3>
                 </div>
 
-                <div className="flex items-end justify-between gap-4 h-64 px-2">
+                <div className="flex h-56 items-end justify-between gap-2 px-1 sm:h-64 sm:gap-4 sm:px-2">
                   {stats.last7Days.map((count, index) => {
                     const barHeight = count === 0 ? 0 : Math.max((count / maxSessions) * 176, 14);
 
@@ -349,14 +361,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-white dark:bg-white/5 p-8 rounded-3xl border border-[#E8DFC9] dark:border-white/10 shadow-sm"
+                className="rounded-3xl border border-[#E8DFC9] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5 sm:p-8"
               >
-                <h3 className="text-lg font-bold flex items-center gap-2 mb-8">
+                <h3 className="mb-5 flex items-center gap-2 text-lg font-bold sm:mb-8">
                   <Award className="w-5 h-5 text-amber-500" />
                   Kỹ thuật phổ biến
                 </h3>
 
-                <div className="space-y-6">
+                <div className="space-y-4 sm:space-y-6">
                   {stats.techniques.map((technique, index) => (
                     <div key={technique.name} className="space-y-2">
                       <div className="flex justify-between text-sm">
@@ -384,16 +396,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white dark:bg-white/5 rounded-3xl border border-[#E8DFC9] dark:border-white/10 shadow-sm overflow-hidden"
-            >
-              <div className="p-8 border-b border-[#E8DFC9] dark:border-white/10">
-                <h3 className="text-lg font-bold flex items-center gap-2">
-                  <List className="w-5 h-5 text-emerald-500" />
-                  Hoạt động gần đây
-                </h3>
-              </div>
-              <div className={`${shouldScrollRecentSessions ? 'max-h-[1200px] overflow-y-auto' : ''} overflow-x-auto`}>
-                <table className="w-full text-left border-collapse">
+                className="overflow-hidden rounded-3xl border border-[#E8DFC9] bg-white shadow-sm dark:border-white/10 dark:bg-white/5"
+              >
+                <div className="border-b border-[#E8DFC9] p-4 dark:border-white/10 sm:p-8">
+                  <h3 className="text-lg font-bold flex items-center gap-2">
+                    <List className="w-5 h-5 text-emerald-500" />
+                    Hoạt động gần đây
+                  </h3>
+                </div>
+                <div className="block md:hidden">
+                  {stats.recentSessions.length === 0 ? (
+                    <div className="px-4 py-12 text-center text-sm italic text-[#8B7D6E] dark:text-[#B0A090]">
+                      Chưa có hoạt động nào.
+                    </div>
+                  ) : (
+                    <div className={`${shouldScrollRecentSessions ? 'max-h-[960px] overflow-y-auto' : ''} divide-y divide-[#E8DFC9]/70 dark:divide-white/5`}>
+                      {stats.recentSessions.map((session) => {
+                        const displayName = session.profiles?.email || 'Người dùng mới';
+                        const email = session.profiles?.email || 'Chưa có email';
+
+                        return (
+                          <div key={session.id} className="space-y-4 px-4 py-4">
+                            <div className="flex items-start gap-3">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 text-xs font-bold text-indigo-600 dark:bg-indigo-900/30">
+                                {displayName.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-[#4A3C31] dark:text-[#F5EDE0]">{displayName}</p>
+                                <p className="truncate text-xs text-[#8B7D6E] dark:text-[#B0A090]">{email}</p>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                              <div className="rounded-2xl bg-[#FAF6EF] px-3 py-2 dark:bg-white/[0.03]">
+                                <p className="text-[11px] uppercase tracking-wide text-[#8B7D6E] dark:text-[#B0A090]">Bài thiền</p>
+                                <p className="mt-1 font-medium text-[#4A3C31] dark:text-[#F5EDE0]">{session.technique_name}</p>
+                              </div>
+                              <div className="rounded-2xl bg-[#FAF6EF] px-3 py-2 dark:bg-white/[0.03]">
+                                <p className="text-[11px] uppercase tracking-wide text-[#8B7D6E] dark:text-[#B0A090]">Thời lượng</p>
+                                <p className="mt-1 inline-flex rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400">
+                                  {Math.floor(session.duration_seconds / 60)}:{(session.duration_seconds % 60).toString().padStart(2, '0')}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="rounded-2xl bg-[#FAF6EF] px-3 py-2 text-sm dark:bg-white/[0.03]">
+                              <p className="text-[11px] uppercase tracking-wide text-[#8B7D6E] dark:text-[#B0A090]">Thời điểm</p>
+                              <p className="mt-1 font-medium text-[#4A3C31] dark:text-[#F5EDE0]">{new Date(session.created_at).toLocaleDateString('vi-VN')}</p>
+                              <p className="text-xs text-[#8B7D6E] dark:text-[#B0A090]">
+                                {new Date(session.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div className={`${shouldScrollRecentSessions ? 'max-h-[1200px] overflow-y-auto' : ''} hidden overflow-x-auto md:block`}>
+                  <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-50/50 dark:bg-white/[0.02] text-xs uppercase tracking-wider text-[#8B7D6E] dark:text-[#B0A090]">
                       <th className="px-8 py-4 font-semibold">Người dùng</th>
