@@ -988,7 +988,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 12 }}
-              className="fixed z-[72] w-[min(320px,calc(100vw-32px))] rounded-[26px] border border-[#E3D3BC] bg-[rgba(252,249,243,0.97)] p-4 text-[#4A3C31] shadow-[0_24px_60px_rgba(91,77,65,0.18)] backdrop-blur-xl sm:w-[280px] sm:p-5"
+              className="fixed z-[72] w-[min(320px,calc(100vw-32px))] rounded-[26px] border border-[#E3D3BC] bg-[rgba(252,249,243,0.97)] p-4 text-[#4A3C31] shadow-[0_24px_60px_rgba(91,77,65,0.18)] backdrop-blur-xl sm:w-[340px] sm:p-5"
               style={controlTourCardStyle}
             >
               <div className="mb-3 flex items-center justify-between gap-3">
@@ -1019,24 +1019,24 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
                 ))}
               </div>
 
-              <div className="mt-5 flex items-end justify-between gap-3 sm:mt-6">
+              <div className="mt-5 flex flex-col gap-3 sm:mt-6 sm:flex-row sm:items-center sm:justify-between">
                 <button
                   onClick={() => setControlsTourStep((currentStep) => Math.max(currentStep - 1, 0))}
                   disabled={controlsTourStep === 0}
-                  className="rounded-full px-3 py-2 text-sm font-medium text-[#8B7D6E] transition-all hover:bg-[#F6EFE4] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4"
+                  className="rounded-full px-3 py-2 text-sm font-medium text-[#8B7D6E] transition-all hover:bg-[#F6EFE4] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:whitespace-nowrap"
                 >
                   Quay lại
                 </button>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-end gap-2">
                   <button
                     onClick={finishControlsTour}
-                    className="rounded-full px-3 py-2 text-sm font-medium text-[#8B7D6E] transition-all hover:bg-[#F6EFE4] sm:px-4"
+                    className="rounded-full px-3 py-2 text-sm font-medium text-[#8B7D6E] transition-all hover:bg-[#F6EFE4] sm:px-4 sm:whitespace-nowrap"
                   >
                     Bỏ qua
                   </button>
                   <button
                     onClick={goToNextControlsTourStep}
-                    className="rounded-full bg-[#5A4D41] px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-[#4A3C31] sm:px-5"
+                    className="rounded-full bg-[#5A4D41] px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-[#4A3C31] sm:px-5 sm:whitespace-nowrap"
                   >
                     {controlsTourStep === controlTourSteps.length - 1 ? 'Xong' : 'Tiếp theo'}
                   </button>
