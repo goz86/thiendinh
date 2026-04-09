@@ -241,6 +241,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
             ? Math.max(activeControlButtonRect.left - 320, 16)
             : Math.min(activeControlButtonRect.right + 16, Math.max(window.innerWidth - 296, 16)),
         right: isMobile ? 16 : 'auto',
+        width: isMobile ? 'auto' : undefined,
       }
     : { top: 24, left: 24 };
 
