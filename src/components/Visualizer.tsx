@@ -187,15 +187,30 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
   const [showControlsTour, setShowControlsTour] = useState(false);
   const [controlsTourStep, setControlsTourStep] = useState(0);
   
-  // Mobile detection for performance
-  const isMobile = useMemo(() => {
+  const [isMobileViewport, setIsMobileViewport] = useState(() => {
     if (typeof window === 'undefined') return false;
-    return window.innerWidth < 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  }, []);
+    return window.innerWidth < 768;
+  });
+  const isTouchMobile = typeof navigator !== 'undefined'
+    && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isMobile = isMobileViewport || isTouchMobile;
 
   const [showJournalInput, setShowJournalInput] = useState(false);
   const [sessionMood, setSessionMood] = useState<Mood>('peaceful');
   const [sessionNote, setSessionNote] = useState('');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const updateViewportMode = () => {
+      setIsMobileViewport(window.innerWidth < 768);
+    };
+
+    updateViewportMode();
+    window.addEventListener('resize', updateViewportMode);
+
+    return () => window.removeEventListener('resize', updateViewportMode);
+  }, []);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const bgAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -228,21 +243,22 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
     ? controlButtonRefs.current[activeControlTourStep.key]?.getBoundingClientRect() ?? null
     : null;
   const controlTourCardStyle = activeControlButtonRect
-    ? {
-        top: isMobile
-          ? 96
-          : Math.min(
-              Math.max(activeControlButtonRect.top - 10, 20),
-              Math.max(window.innerHeight - 220, 20)
-            ),
-        left: isMobile
-          ? 16
-          : activeControlButtonRect.left > 320
+    ? isMobile
+      ? {
+          top: 96,
+          left: 16,
+          right: 16,
+          width: 'auto',
+        }
+      : {
+          top: Math.min(
+            Math.max(activeControlButtonRect.top - 10, 20),
+            Math.max(window.innerHeight - 220, 20)
+          ),
+          left: activeControlButtonRect.left > 320
             ? Math.max(activeControlButtonRect.left - 320, 16)
             : Math.min(activeControlButtonRect.right + 16, Math.max(window.innerWidth - 296, 16)),
-        right: isMobile ? 16 : 'auto',
-        width: isMobile ? 'auto' : undefined,
-      }
+        }
     : { top: 24, left: 24 };
 
   // Audio initialization and pattern sanitization
@@ -1020,24 +1036,24 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
                 ))}
               </div>
 
-              <div className="mt-5 flex flex-col gap-3 sm:mt-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-5 flex items-center justify-between gap-2 sm:mt-6">
                 <button
                   onClick={() => setControlsTourStep((currentStep) => Math.max(currentStep - 1, 0))}
                   disabled={controlsTourStep === 0}
-                  className="rounded-full px-3 py-2 text-sm font-medium text-[#8B7D6E] transition-all hover:bg-[#F6EFE4] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:whitespace-nowrap"
+                  className="rounded-full px-2.5 py-2 text-xs font-medium text-[#8B7D6E] transition-all hover:bg-[#F6EFE4] disabled:cursor-not-allowed disabled:opacity-40 whitespace-nowrap sm:px-4 sm:text-sm"
                 >
                   Quay lại
                 </button>
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex shrink-0 items-center justify-end gap-2">
                   <button
                     onClick={finishControlsTour}
-                    className="rounded-full px-3 py-2 text-sm font-medium text-[#8B7D6E] transition-all hover:bg-[#F6EFE4] sm:px-4 sm:whitespace-nowrap"
+                    className="rounded-full px-2.5 py-2 text-xs font-medium text-[#8B7D6E] transition-all hover:bg-[#F6EFE4] whitespace-nowrap sm:px-4 sm:text-sm"
                   >
                     Bỏ qua
                   </button>
                   <button
                     onClick={goToNextControlsTourStep}
-                    className="rounded-full bg-[#5A4D41] px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-[#4A3C31] sm:px-5 sm:whitespace-nowrap"
+                    className="rounded-full bg-[#5A4D41] px-3.5 py-2 text-xs font-semibold text-white transition-all hover:bg-[#4A3C31] whitespace-nowrap sm:px-5 sm:text-sm"
                   >
                     {controlsTourStep === controlTourSteps.length - 1 ? 'Xong' : 'Tiếp theo'}
                   </button>
