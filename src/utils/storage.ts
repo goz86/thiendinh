@@ -8,6 +8,7 @@ import { calculateStatsFromSessions } from './stats';
 
 const SESSIONS_KEY = 'mindful-meditation-sessions';
 const JOURNAL_KEY = 'mindful-meditation-journal';
+const STORAGE_SCOPE_KEY = 'mindful-storage-scope';
 const JOURNAL_TABLE = 'journal_entries';
 
 type CloudSessionRow = {
@@ -52,6 +53,27 @@ const readJson = <T,>(key: string): T[] => {
 
 const writeJson = <T,>(key: string, value: T[]) => {
   localStorage.setItem(key, JSON.stringify(value));
+};
+
+const getStorageScope = () => localStorage.getItem(STORAGE_SCOPE_KEY) || 'guest';
+
+const getScopedKey = (baseKey: string) => `${baseKey}:${getStorageScope()}`;
+
+const migrateLegacyDataIfNeeded = (legacyKey: string, scopedKey: string) => {
+  if (localStorage.getItem(scopedKey)) return;
+
+  const legacyRaw = localStorage.getItem(legacyKey);
+  if (!legacyRaw) return;
+
+  localStorage.setItem(scopedKey, legacyRaw);
+};
+
+export const setActiveStorageScope = (scope: string | null | undefined) => {
+  const normalizedScope = scope?.trim() || 'guest';
+  localStorage.setItem(STORAGE_SCOPE_KEY, normalizedScope);
+
+  migrateLegacyDataIfNeeded(SESSIONS_KEY, getScopedKey(SESSIONS_KEY));
+  migrateLegacyDataIfNeeded(JOURNAL_KEY, getScopedKey(JOURNAL_KEY));
 };
 
 const generateId = () => {
@@ -148,10 +170,14 @@ const deleteJournalFromCloud = async (id: string, userId: string) => {
   }
 };
 
-export const loadSessions = (): MeditationSession[] => readJson<MeditationSession>(SESSIONS_KEY);
+export const loadSessions = (): MeditationSession[] => {
+  const scopedKey = getScopedKey(SESSIONS_KEY);
+  migrateLegacyDataIfNeeded(SESSIONS_KEY, scopedKey);
+  return readJson<MeditationSession>(scopedKey);
+};
 
 export const saveSessions = (sessions: MeditationSession[]) => {
-  writeJson(SESSIONS_KEY, sessions);
+  writeJson(getScopedKey(SESSIONS_KEY), sessions);
 };
 
 export const addSession = async (session: Omit<MeditationSession, 'id'>) => {
@@ -176,10 +202,14 @@ export const addSession = async (session: Omit<MeditationSession, 'id'>) => {
   return newSession.id;
 };
 
-export const loadJournalEntries = (): JournalEntry[] => readJson<JournalEntry>(JOURNAL_KEY);
+export const loadJournalEntries = (): JournalEntry[] => {
+  const scopedKey = getScopedKey(JOURNAL_KEY);
+  migrateLegacyDataIfNeeded(JOURNAL_KEY, scopedKey);
+  return readJson<JournalEntry>(scopedKey);
+};
 
 export const saveJournalEntries = (entries: JournalEntry[]) => {
-  writeJson(JOURNAL_KEY, entries);
+  writeJson(getScopedKey(JOURNAL_KEY), entries);
 };
 
 export const addJournalEntry = async (entry: Omit<JournalEntry, 'id'>) => {

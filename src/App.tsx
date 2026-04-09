@@ -4,6 +4,7 @@ import { Library } from './components/Library';
 import { supabase } from './lib/supabase';
 import type { BreathingTechnique } from './types';
 import { isAdminEmail } from './utils/auth';
+import { setActiveStorageScope } from './utils/storage';
 import { trackSiteVisit } from './utils/visits';
 
 type View =
@@ -61,12 +62,14 @@ function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      setActiveStorageScope(session?.user?.id ?? null);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      setActiveStorageScope(session?.user?.id ?? null);
       if (session?.user && view === 'auth') {
         setView('library');
       }

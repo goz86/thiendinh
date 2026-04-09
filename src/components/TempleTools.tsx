@@ -40,18 +40,15 @@ export const TempleTools: React.FC<TempleToolsProps> = ({ onBack }) => {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, now);
 
-      const attack = 0.005;
-      const decay = 2 + index;
-
       gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(0.2 / (index + 1), now + attack);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + decay);
+      gain.gain.linearRampToValueAtTime(0.2 / (index + 1), now + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 2 + index);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
 
       osc.start(now);
-      osc.stop(now + decay + 0.1);
+      osc.stop(now + 2.2 + index);
     });
   }, []);
 
@@ -88,11 +85,8 @@ export const TempleTools: React.FC<TempleToolsProps> = ({ onBack }) => {
   }, []);
 
   const triggerSound = useCallback((event?: React.MouseEvent | React.TouchEvent) => {
-    if (activeTool === 'bell') {
-      playBell();
-    } else {
-      playWoodblock();
-    }
+    if (activeTool === 'bell') playBell();
+    else playWoodblock();
 
     setStrikeCount((prev) => prev + 1);
 
@@ -128,14 +122,14 @@ export const TempleTools: React.FC<TempleToolsProps> = ({ onBack }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#FCF9F3] dark:bg-[#0d0b09]">
-      <div className="relative z-20 flex items-center justify-between p-6">
+      <div className="relative z-20 flex items-center justify-between p-4 sm:p-6">
         <button
           onClick={onBack}
           className="rounded-full bg-white/80 p-3 shadow-sm transition-colors hover:bg-white dark:bg-white/5"
         >
           <ChevronLeft className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />
         </button>
-        <h3 className="text-xl font-medium text-[#4A3C31] dark:text-[#F5EDE0]">Chuông và mõ</h3>
+        <h3 className="text-lg font-medium text-[#4A3C31] dark:text-[#F5EDE0] sm:text-xl">Chuông và mõ</h3>
         <button
           onClick={() => setStrikeCount(0)}
           className="rounded-full bg-white/80 p-3 shadow-sm transition-colors hover:bg-white dark:bg-white/5"
@@ -145,7 +139,7 @@ export const TempleTools: React.FC<TempleToolsProps> = ({ onBack }) => {
         </button>
       </div>
 
-      <div className="px-6 pb-4">
+      <div className="px-4 pb-4 sm:px-6">
         <div className="mx-auto flex max-w-md items-center justify-between rounded-3xl border border-[#E8DFC9] bg-white/60 px-4 py-3 shadow-sm dark:border-white/10 dark:bg-white/5">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-[#8B7D6E] dark:text-[#DECAA4]/60">Phiên hiện tại</p>
@@ -157,39 +151,39 @@ export const TempleTools: React.FC<TempleToolsProps> = ({ onBack }) => {
         </div>
       </div>
 
-      <div className="mb-6 flex justify-center gap-4 px-6">
+      <div className="mb-4 grid grid-cols-2 gap-3 px-4 sm:mb-6 sm:flex sm:justify-center sm:gap-4 sm:px-6">
         <button
           onClick={() => {
             setActiveTool('woodblock');
             setAutoTap(false);
           }}
-          className={`flex items-center gap-2 rounded-full border px-6 py-2 transition-all ${
+          className={`flex min-h-[56px] items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm transition-all sm:px-6 sm:py-2 ${
             activeTool === 'woodblock'
               ? 'border-transparent bg-[#5D2E0C] text-white shadow-lg'
               : 'border-[#E8DFC9] bg-white/60 text-[#8B7D6E] dark:border-white/10 dark:bg-white/5 dark:text-[#DECAA4]'
           }`}
         >
-          <Music2 className="h-4 w-4" />
-          Mõ gõ nhịp
+          <Music2 className="h-4 w-4 shrink-0" />
+          <span className="text-center leading-tight">Mõ gõ nhịp</span>
         </button>
         <button
           onClick={() => {
             setActiveTool('bell');
             setAutoTap(false);
           }}
-          className={`flex items-center gap-2 rounded-full border px-6 py-2 transition-all ${
+          className={`flex min-h-[56px] items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm transition-all sm:px-6 sm:py-2 ${
             activeTool === 'bell'
               ? 'border-transparent bg-[#A37B5C] text-white shadow-lg'
               : 'border-[#E8DFC9] bg-white/60 text-[#8B7D6E] dark:border-white/10 dark:bg-white/5 dark:text-[#DECAA4]'
           }`}
         >
-          <Volume2 className="h-4 w-4" />
-          Chuông thiền
+          <Volume2 className="h-4 w-4 shrink-0" />
+          <span className="text-center leading-tight">Chuông thiền</span>
         </button>
       </div>
 
       <div
-        className="relative flex flex-1 cursor-pointer select-none flex-col items-center justify-center overflow-hidden touch-none"
+        className="relative flex flex-1 cursor-pointer select-none flex-col items-center justify-center overflow-hidden touch-none px-4"
         onMouseDown={(event) => !autoTap && triggerSound(event)}
       >
         <AnimatePresence>
@@ -208,42 +202,42 @@ export const TempleTools: React.FC<TempleToolsProps> = ({ onBack }) => {
 
         <motion.div
           animate={{
-            scale: ripples.length > 0 ? 1.05 : 1,
+            scale: ripples.length > 0 ? 1.04 : 1,
             rotate: ripples.length > 0 ? (activeTool === 'bell' ? [0, -2, 2, -2, 0] : [0, 1, -1, 0]) : 0,
           }}
           transition={{ duration: 0.1 }}
           className="relative"
         >
           {activeTool === 'woodblock' ? (
-            <div className="relative flex h-64 w-64 items-center justify-center rounded-[40%] border-b-8 border-r-4 border-black/20 bg-gradient-to-br from-[#8B4513] to-[#5D2E0C] shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
-              <div className="absolute left-1/4 top-1/2 h-4 w-1/2 rounded-full bg-black/40 blur-[2px]" />
+            <div className="relative flex h-44 w-44 items-center justify-center rounded-[38%] border-b-8 border-r-4 border-black/20 bg-gradient-to-br from-[#8B4513] to-[#5D2E0C] shadow-[0_20px_50px_rgba(0,0,0,0.3)] sm:h-64 sm:w-64">
+              <div className="absolute left-1/4 top-1/2 h-3 w-1/2 rounded-full bg-black/40 blur-[2px] sm:h-4" />
               <div className="absolute left-1/4 top-4 h-1 w-1/2 rounded-full bg-white/10 blur-[1px]" />
             </div>
           ) : (
             <div className="relative">
-              <div className="flex h-64 w-64 items-center justify-center rounded-full border-b-4 border-[#8B7D6E] bg-gradient-to-br from-[#DECAA4] via-[#C2A385] to-[#A37B5C] shadow-[0_30px_60px_rgba(163,123,92,0.4)]">
-                <div className="h-56 w-56 rounded-full border-4 border-white/20" />
+              <div className="flex h-44 w-44 items-center justify-center rounded-full border-b-4 border-[#8B7D6E] bg-gradient-to-br from-[#DECAA4] via-[#C2A385] to-[#A37B5C] shadow-[0_30px_60px_rgba(163,123,92,0.4)] sm:h-64 sm:w-64">
+                <div className="h-36 w-36 rounded-full border-4 border-white/20 sm:h-56 sm:w-56" />
               </div>
-              <div className="absolute left-10 top-10 h-10 w-20 rotate-45 bg-white/30 blur-xl" />
+              <div className="absolute left-8 top-8 h-8 w-16 rotate-45 bg-white/30 blur-xl sm:left-10 sm:top-10 sm:h-10 sm:w-20" />
             </div>
           )}
         </motion.div>
 
-        <p className="mt-16 text-center text-sm font-medium tracking-[0.25em] text-[#8B7D6E] opacity-70 dark:text-[#B0A090]">
+        <p className="mt-8 text-center text-xs font-medium tracking-[0.2em] text-[#8B7D6E] opacity-70 dark:text-[#B0A090] sm:mt-16 sm:text-sm sm:tracking-[0.25em]">
           {autoTap ? 'Đang tự gõ theo nhịp' : activeTool === 'bell' ? 'Chạm để ngân chuông' : 'Chạm để gõ mõ'}
         </p>
       </div>
 
-      <div className="border-t border-[#E8DFC9] bg-white/40 p-6 backdrop-blur-md dark:border-white/10 dark:bg-white/5">
+      <div className="border-t border-[#E8DFC9] bg-white/40 p-4 backdrop-blur-md dark:border-white/10 dark:bg-white/5 sm:p-6">
         <div className="mx-auto flex max-w-xl flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
               <p className="text-sm font-medium text-[#5A4D41] dark:text-[#F5EDE0]">Tự gõ theo nhịp</p>
               <p className="text-xs text-[#8B7D6E] dark:text-[#DECAA4]/60">Phù hợp khi muốn giữ tiết tấu ổn định.</p>
             </div>
             <button
               onClick={() => setAutoTap((prev) => !prev)}
-              className={`rounded-full p-3 transition-all ${
+              className={`shrink-0 rounded-full p-3 transition-all ${
                 autoTap ? 'bg-orange-500 text-white' : 'bg-white/80 text-[#A37B5C] dark:bg-white/10'
               }`}
             >
