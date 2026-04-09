@@ -302,7 +302,6 @@ export const Library: React.FC<LibraryProps> = ({
               <PenLine className="h-5 w-5 text-[#A37B5C]" />
               Tâm trạng của bạn hôm nay như thế nào?
             </h3>
-            <p className="mt-1 text-sm text-[#8B7D6E] dark:text-[#B0A090]">Viết vài dòng ngắn ngay tại đây, không cần mở riêng Nhật ký.</p>
           </div>
           <button
             onClick={onJournal}
