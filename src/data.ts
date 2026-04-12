@@ -50,7 +50,7 @@ export const techniques: BreathingTechnique[] = [
     id: 'calm',
     name: 'Thở Tĩnh Lặng (2-1)',
     description:
-      'Thở ra gấp đôi thời gian hít vào, kích hoạt dây thần kinh phế vị để đưa cơ thể về trạng thái nghỉ ngơi.',
+      'Thở ra dài hơn hít vào giúp làm dịu dây thần kinh phế vị và đưa cơ thể về trạng thái nghỉ ngơi.',
     benefit: 'Xoa dịu stress',
     pattern: { inhale: 4, hold1: 0, exhale: 8, hold2: 0 },
     color: 'bg-teal-500',
@@ -111,20 +111,13 @@ export const techniques: BreathingTechnique[] = [
   },
   {
     id: 'ocean',
-    name: 'Thở Đại Dương',
+    name: 'Thở Mím Môi',
     description:
-      'Thở chậm qua một cổ họng hơi khép để tạo âm thanh như tiếng sóng, giúp gom tâm vào hiện tại và giãn cơ thể rất tốt.',
-    benefit: 'Tập trung sâu',
-    pattern: { inhale: 4, hold1: 0, exhale: 6, hold2: 0 },
+      'Cleveland Clinic hướng dẫn hít bằng mũi 2 giây rồi thở ra qua môi chụm 4 giây để làm chậm nhịp thở và dễ thở hơn.',
+    benefit: 'Dễ thở & ổn định',
+    sourceLabel: 'Cleveland Clinic',
+    sourceUrl: 'https://my.clevelandclinic.org/health/diseases_conditions/hic_Understanding_COPD/hic_Pulmonary_Rehabilitation_Is_it_for_You/hic_Pursed_Lip_Breathing',
+    pattern: { inhale: 2, hold1: 0, exhale: 4, hold2: 0 },
     color: 'bg-cyan-600',
-  },
-  {
-    id: 'bee',
-    name: 'Thở Ong Ngâm',
-    description:
-      'Thở ra kèm âm rung nhẹ như tiếng ong giúp xoa dịu hệ thần kinh, giảm ồn tâm trí và rất phù hợp trước khi ngủ hoặc thiền tĩnh.',
-    benefit: 'Dịu lo âu',
-    pattern: { inhale: 4, hold1: 0, exhale: 8, hold2: 0 },
-    color: 'bg-yellow-500',
   },
 ];

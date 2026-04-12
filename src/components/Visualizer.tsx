@@ -1,8 +1,20 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, X, Volume2, VolumeX, ArrowLeft, Music, Maximize, Minimize, Mic, MicOff, Timer, RefreshCw, Sparkles, Flower, Wind, Send, MoonStar, SunMedium } from 'lucide-react';
+import { Settings, X, Volume2, VolumeX, ArrowLeft, Music, Maximize, Minimize, Mic, MicOff, Timer, RefreshCw, Sparkles, Flower, Send, MoonStar, SunMedium } from 'lucide-react';
 import type { BreathingTechnique, VisualMode, Mood } from '../types';
 import { addSession, addJournalEntry, getLocalDateTimeString } from '../utils/storage';
+import { guidedSessions } from '../data/guidedSessions';
+
+type WakeLockSentinelLike = {
+  release: () => Promise<void>;
+  addEventListener?: (type: 'release', listener: () => void) => void;
+};
+
+type WakeLockNavigator = Navigator & {
+  wakeLock?: {
+    request: (type: 'screen') => Promise<WakeLockSentinelLike>;
+  };
+};
 
 interface VisualizerProps {
   technique: BreathingTechnique;
@@ -170,6 +182,12 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
   const [phase, setPhase] = useState<Phase>('inhale');
   const [timeLeft, setTimeLeft] = useState(safePattern.inhale);
   const [sessionTime, setSessionTime] = useState(0);
+  const [guidedText, setGuidedText] = useState<string | null>(null);
+
+  const activeGuidedSession = useMemo(() => {
+    if (!technique.isGuided || !technique.guidedSessionId) return null;
+    return guidedSessions.find(s => s.id === technique.guidedSessionId) || null;
+  }, [technique]);
   
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
@@ -177,7 +195,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
   const [reverseAnimation, setReverseAnimation] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [zenMode, setZenMode] = useState(false);
-  const [targetDuration, setTargetDuration] = useState(0); // 0 = unlimited
+  const [targetDuration, setTargetDuration] = useState(technique.isGuided && technique.guidedSessionId ? (guidedSessions.find(s => s.id === technique.guidedSessionId)?.totalDuration || 0) : 0); // 0 = unlimited
   const [customMinutes, setCustomMinutes] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [showMusicPicker, setShowMusicPicker] = useState(false);
@@ -232,6 +250,8 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
   const inhaleAudioRef = useRef<HTMLAudioElement | null>(null);
   const exhaleAudioRef = useRef<HTMLAudioElement | null>(null);
   const holdAudioRef = useRef<HTMLAudioElement | null>(null);
+  const guidedAudioRef = useRef<HTMLAudioElement | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
 
   const layer1 = useMemo(() => generateParticles(isMobile ? 35 : 100, 60, 300), [isMobile]);
   const layer2 = useMemo(() => generateParticles(isMobile ? 25 : 80, 100, 450), [isMobile]);
@@ -416,14 +436,112 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
     };
   }, [stopOscillator]);
 
-  // Session timer
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const wakeLockNavigator = navigator as WakeLockNavigator;
+    if (!window.isSecureContext || !wakeLockNavigator.wakeLock?.request) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const releaseWakeLock = async () => {
+      if (!wakeLockRef.current) return;
+      try {
+        await wakeLockRef.current.release();
+      } catch {
+        // Ignore release failures - the OS/browser may already have released it.
+      } finally {
+        wakeLockRef.current = null;
+      }
+    };
+
+    const requestWakeLock = async () => {
+      if (cancelled || document.visibilityState !== 'visible') return;
+
+      try {
+        const sentinel = await wakeLockNavigator.wakeLock.request('screen');
+        if (cancelled) {
+          await sentinel.release();
+          return;
+        }
+
+        wakeLockRef.current = sentinel;
+        sentinel.addEventListener?.('release', () => {
+          if (wakeLockRef.current === sentinel) {
+            wakeLockRef.current = null;
+          }
+        });
+      } catch {
+        wakeLockRef.current = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        if (!wakeLockRef.current) {
+          void requestWakeLock();
+        }
+        return;
+      }
+
+      void releaseWakeLock();
+    };
+
+    void requestWakeLock();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      void releaseWakeLock();
+    };
+  }, []);
+
+  // Session timer & Guided Audio Sync (with Fallback)
   useEffect(() => {
     let timer: number;
+    let rafId: number;
+    
     if (isActive) {
-      timer = window.setInterval(() => setSessionTime(s => s + 1), 1000);
+      // 1. Fallback Interval (runs every second)
+      timer = window.setInterval(() => {
+        const audio = guidedAudioRef.current;
+        const isAudioActive = audio && !audio.paused && audio.currentTime > 0;
+        
+        // Only increment manually if audio is NOT handling the timing
+        if (!activeGuidedSession || !isAudioActive) {
+          setSessionTime(s => s + 1);
+        }
+      }, 1000);
+
+      // 2. High-Precision Audio Sync (if audio exists and is playing)
+      if (activeGuidedSession && guidedAudioRef.current) {
+        const syncWithAudio = () => {
+          const audio = guidedAudioRef.current;
+          if (audio && !audio.paused) {
+            setSessionTime(audio.currentTime);
+          }
+          rafId = requestAnimationFrame(syncWithAudio);
+        };
+        rafId = requestAnimationFrame(syncWithAudio);
+      }
     }
-    return () => clearInterval(timer);
-  }, [isActive]);
+    
+    return () => {
+      clearInterval(timer);
+      cancelAnimationFrame(rafId);
+    };
+  }, [isActive, activeGuidedSession]);
+
+  useEffect(() => {
+    if (!activeGuidedSession) return;
+    const currentStep = activeGuidedSession.steps.find(
+      (step) => sessionTime >= step.timeOffset && sessionTime < step.timeOffset + step.duration
+    );
+    setGuidedText(currentStep ? currentStep.text : null);
+  }, [sessionTime, activeGuidedSession]);
 
   // Check target duration reached
   useEffect(() => {
@@ -537,6 +655,12 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
       setAppState('breathing');
       playChime();
       speakPhase('Hít vào');
+      
+      // Start guided audio if applicable
+      if (activeGuidedSession && guidedAudioRef.current) {
+        guidedAudioRef.current.currentTime = 0;
+        guidedAudioRef.current.play().catch(e => console.error("Guided audio play error:", e));
+      }
       return;
     }
     const timer = window.setTimeout(() => setCountdownValue(c => c - 1), 1000);
@@ -597,14 +721,22 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
 
   const handlePause = () => {
     setAppState('idle');
+    if (guidedAudioRef.current) guidedAudioRef.current.pause();
   };
 
   const handleResume = () => {
     setAppState('breathing');
+    if (guidedAudioRef.current && activeGuidedSession) {
+      guidedAudioRef.current.play().catch(() => {});
+    }
   };
 
   const handleFinish = () => {
     setAppState('idle');
+    if (guidedAudioRef.current) {
+      guidedAudioRef.current.pause();
+      guidedAudioRef.current.currentTime = 0;
+    }
     if (sessionTime > 0) {
       setShowJournalInput(true);
       
@@ -652,6 +784,10 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
     setAppState('idle');
     setPhase('inhale');
     setTimeLeft(technique.pattern.inhale);
+    if (guidedAudioRef.current) {
+      guidedAudioRef.current.pause();
+      guidedAudioRef.current.currentTime = 0;
+    }
     if (sessionTime > 0) {
       isPersistingSessionRef.current = true;
       try {
@@ -785,46 +921,259 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
     );
   }, [isMobile, getScale, getDuration]);
 
-  const renderZenGarden = useCallback(() => {
-    const scale = getScale(1);
+
+
+  const renderLotus = useCallback(() => {
     const duration = getDuration();
+    const isOpen = phase === 'inhale' || phase === 'hold1';
+    const petalCount = isMobile ? 8 : 12;
+    const outerPetalCount = isMobile ? 6 : 10;
+
     return (
       <div className="relative w-full h-full flex items-center justify-center">
-        {Array.from({ length: isMobile ? 4 : 6 }).map((_, i) => (
+        {/* Soft ambient glow */}
+        <motion.div
+          className="absolute rounded-full"
+          animate={{
+            width: isOpen ? 420 : 200,
+            height: isOpen ? 420 : 200,
+            opacity: isOpen ? 0.25 : 0.08,
+          }}
+          transition={{ duration, ease: 'easeInOut' }}
+          style={{
+            background: 'radial-gradient(circle, rgba(232,180,180,0.4) 0%, rgba(222,202,164,0.1) 60%, transparent 100%)',
+            willChange: 'width, height, opacity',
+          }}
+        />
+
+        {/* Ripple rings */}
+        {[1, 2, 3].map((ring) => (
           <motion.div
-            key={i}
-            className="absolute rounded-full border-2 border-[#DECAA4]/20 shadow-[0_0_15px_rgba(222,202,164,0.1)]"
-            initial={{ width: 0, height: 0, opacity: 0 }}
-            animate={{ 
-              width: (i + 1) * (isMobile ? 60 : 70) * scale,
-              height: (i + 1) * (isMobile ? 60 : 70) * scale,
-              opacity: (0.8 - i * (isMobile ? 0.15 : 0.12)) * (phase === 'inhale' || phase === 'hold1' ? 0.9 : 0.4),
-              borderWidth: phase === 'inhale' ? '3px' : '1.5px'
+            key={`ring-${ring}`}
+            className="absolute rounded-full border border-[#E8B4B4]/15 dark:border-[#E8B4B4]/10"
+            animate={{
+              width: isOpen ? 160 + ring * 90 : 80 + ring * 30,
+              height: isOpen ? 160 + ring * 90 : 80 + ring * 30,
+              opacity: isOpen ? 0.3 - ring * 0.06 : 0.08,
             }}
-            transition={{ duration, ease: "easeInOut" }}
+            transition={{ duration: duration * 1.1, ease: 'easeInOut', delay: ring * 0.05 }}
             style={{ willChange: 'width, height, opacity' }}
           />
         ))}
-        <motion.div
-          className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-[#A37B5C] to-[#5A4D41] rounded-[40%_60%_70%_30%/40%_50%_60%_50%] shadow-2xl relative"
-          animate={{ 
-            scale: 0.85 + scale * 0.35,
-            rotate: [0, 5, -5, 0],
-            borderRadius: ["40% 60% 70% 30%", "50% 50% 50% 50%", "40% 60% 70% 30%"]
-          }}
-          transition={{ 
-            scale: { duration, ease: "easeInOut" },
-            rotate: { duration: 10, repeat: Infinity, ease: "linear" },
-            borderRadius: { duration: 5, repeat: Infinity, ease: "easeInOut" }
-          }}
-          style={{ willChange: 'transform' }}
+
+        <svg
+          className="w-[320px] h-[320px] sm:w-[400px] sm:h-[400px]"
+          viewBox="-20 -20 240 240"
+          fill="none"
         >
-          {/* Stone glow inner */}
-          <div className="absolute inset-0 bg-white/5 blur-md rounded-full" />
-        </motion.div>
+          <defs>
+            <radialGradient id="lotus-center-grad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#FFE4B5" />
+              <stop offset="100%" stopColor="#DECAA4" />
+            </radialGradient>
+            <linearGradient id="lotus-petal-inner" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#F5C6C6" />
+              <stop offset="100%" stopColor="#E8A0A0" />
+            </linearGradient>
+            <linearGradient id="lotus-petal-outer" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#F0D4D4" />
+              <stop offset="60%" stopColor="#E8B4B4" />
+              <stop offset="100%" stopColor="#D4908A" />
+            </linearGradient>
+          </defs>
+
+          {/* Outer petals (larger, slightly behind) */}
+          {Array.from({ length: outerPetalCount }).map((_, i) => {
+            const angle = (360 / outerPetalCount) * i + (180 / outerPetalCount);
+            return (
+              <motion.ellipse
+                key={`outer-${i}`}
+                cx="100"
+                cy="45"
+                fill="url(#lotus-petal-outer)"
+                opacity={0.6}
+                animate={{
+                  rx: isOpen ? 18 : 6,
+                  ry: isOpen ? 52 : 18,
+                  cy: isOpen ? 38 : 65,
+                }}
+                transition={{ duration, ease: 'easeInOut', delay: i * 0.02 }}
+                transform={`rotate(${angle} 100 100)`}
+                style={{ willChange: 'rx, ry' }}
+              />
+            );
+          })}
+
+          {/* Inner petals */}
+          {Array.from({ length: petalCount }).map((_, i) => {
+            const angle = (360 / petalCount) * i;
+            return (
+              <motion.ellipse
+                key={`inner-${i}`}
+                cx="100"
+                cy="50"
+                fill="url(#lotus-petal-inner)"
+                opacity={0.85}
+                animate={{
+                  rx: isOpen ? 15 : 5,
+                  ry: isOpen ? 45 : 14,
+                  cy: isOpen ? 48 : 72,
+                }}
+                transition={{ duration, ease: 'easeInOut', delay: i * 0.015 }}
+                transform={`rotate(${angle} 100 100)`}
+                style={{ willChange: 'rx, ry' }}
+              />
+            );
+          })}
+
+          {/* Center pistil */}
+          <motion.circle
+            cx="100"
+            cy="100"
+            fill="url(#lotus-center-grad)"
+            animate={{
+              r: isOpen ? 18 : 12,
+              opacity: isOpen ? 1 : 0.7,
+            }}
+            transition={{ duration, ease: 'easeInOut' }}
+          />
+          <motion.circle
+            cx="100"
+            cy="100"
+            fill="#FFD700"
+            opacity={0.4}
+            animate={{ r: isOpen ? 10 : 6 }}
+            transition={{ duration, ease: 'easeInOut' }}
+          />
+
+          {/* Tiny glowing dots around center */}
+          {Array.from({ length: 6 }).map((_, i) => {
+            const dotAngle = (360 / 6) * i;
+            const radians = (dotAngle * Math.PI) / 180;
+            return (
+              <motion.circle
+                key={`dot-${i}`}
+                fill="#FFE4B5"
+                animate={{
+                  cx: 100 + Math.cos(radians) * (isOpen ? 24 : 10),
+                  cy: 100 + Math.sin(radians) * (isOpen ? 24 : 10),
+                  r: isOpen ? 2.5 : 1.2,
+                  opacity: isOpen ? 0.8 : 0.3,
+                }}
+                transition={{ duration, ease: 'easeInOut', delay: i * 0.03 }}
+              />
+            );
+          })}
+        </svg>
       </div>
     );
-  }, [isMobile, getScale, getDuration, phase]);
+  }, [isMobile, getDuration, phase]);
+
+  const renderLotusBud = useCallback(() => {
+    const duration = getDuration();
+    const isBlooming = phase === 'exhale' || phase === 'hold2';
+    
+    const petals = [
+      { id: 'b1', angle: -30, bloomAngle: -60, color: '#F0D4D4', opacity: 0.6 },
+      { id: 'b2', angle: 30, bloomAngle: 60, color: '#F0D4D4', opacity: 0.6 },
+      { id: 'i1', angle: -12, bloomAngle: -25, color: 'url(#lotus-petal-outer)', opacity: 0.85 },
+      { id: 'i2', angle: 12, bloomAngle: 25, color: 'url(#lotus-petal-outer)', opacity: 0.85 },
+      { id: 'pistil', angle: 0, bloomAngle: 0, color: 'url(#lotus-center-grad)', opacity: 1, type: 'pistil' },
+      { id: 'c1', angle: -4, bloomAngle: -10, color: 'url(#lotus-petal-inner)', opacity: 0.95 },
+      { id: 'c2', angle: 4, bloomAngle: 10, color: 'url(#lotus-petal-inner)', opacity: 0.95 },
+      { id: 'center', angle: 0, bloomAngle: 0, color: '#F5C6C6', opacity: 1 }
+    ];
+
+    return (
+      <div className="relative w-full h-full flex items-center justify-center pointer-events-none">
+        <svg 
+          className="w-[300px] h-[300px] sm:w-[380px] sm:h-[380px]" 
+          viewBox="0 0 200 200" 
+          fill="none"
+        >
+          <defs>
+            <linearGradient id="lotus-petal-inner" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#FF6B8B" />
+              <stop offset="50%" stopColor="#FF9AA2" />
+              <stop offset="100%" stopColor="#FFF5F5" />
+            </linearGradient>
+            <linearGradient id="lotus-petal-outer" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#D48A8A" />
+              <stop offset="60%" stopColor="#E8B4B4" />
+              <stop offset="100%" stopColor="#F8ECEC" />
+            </linearGradient>
+            <linearGradient id="lotus-center-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#FFEAA7" />
+              <stop offset="60%" stopColor="#FFD700" />
+              <stop offset="100%" stopColor="#F9D423" />
+            </linearGradient>
+            <filter id="petal-shadow">
+              <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.15" />
+            </filter>
+          </defs>
+
+          <g transform="translate(100, 185)" filter="url(#petal-shadow)">
+            {/* Ambient base glow */}
+            <motion.ellipse
+              cx="0" cy="5"
+              fill="#FFE4B5"
+              animate={{ 
+                rx: isBlooming ? 65 : 22, 
+                ry: isBlooming ? 20 : 10, 
+                opacity: isBlooming ? 0.3 : 0.5 
+              }}
+              transition={{ duration, ease: 'easeInOut' }}
+              style={{ filter: 'blur(20px)' }}
+            />
+
+            {petals.map((p, idx) => (
+              <motion.g
+                key={p.id}
+                animate={{ rotate: isBlooming ? p.bloomAngle : p.angle }}
+                transition={{ 
+                  duration, 
+                  ease: 'easeInOut',
+                  delay: idx * 0.02 // Subtle staggered feel
+                }}
+                style={{ 
+                  originX: "50%", 
+                  originY: "100%",
+                  willChange: 'transform' 
+                }}
+              >
+                {p.type === 'pistil' ? (
+                  <motion.path
+                    fill={p.color}
+                    opacity={p.opacity}
+                    animate={{ 
+                      d: isBlooming 
+                        ? "M 0 0 C -18 -35, -25 -75, 0 -95 C 25 -75, 18 -35, 0 0" 
+                        : "M 0 0 C -12 -25, -18 -60, 0 -75 C 18 -60, 12 -25, 0 0" 
+                    }}
+                    transition={{ duration, ease: 'easeInOut' }}
+                  />
+                ) : (
+                  <motion.path
+                    fill={p.color}
+                    opacity={p.opacity}
+                    animate={{ 
+                      d: isBlooming 
+                        ? "M 0 0 C -40 -20, -25 -90, 0 -115 C 25 -90, 40 -20, 0 0" 
+                        : "M 0 0 C -15 -45, -8 -105, 0 -125 C 8 -105, 15 -45, 0 0" 
+                    }}
+                    transition={{ duration, ease: 'easeInOut' }}
+                  />
+                )}
+              </motion.g>
+            ))}
+
+            {/* Stem base */}
+            <path d="M -7 0 Q 0 16 7 0 Z" fill="#A37B5C" opacity="0.45" />
+          </g>
+        </svg>
+      </div>
+    );
+  }, [isMobile, getDuration, phase]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -1153,17 +1502,18 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-40"
+            className="fixed inset-0 bg-black/5 dark:bg-black/20 z-40 backdrop-blur-[1px]"
             onClick={() => setShowSettings(false)}
           />
         )}
         {showSettings && (
           <motion.div
             key="settings-panel"
-            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            initial={isMobile ? { y: '100%' } : { opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="absolute top-24 right-6 bg-white/95 dark:bg-[#2a2420]/95 backdrop-blur-md rounded-2xl p-6 shadow-2xl z-50 border border-[#E8DFC9] dark:border-white/10 w-80"
+            exit={isMobile ? { y: '100%' } : { opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="fixed sm:absolute bottom-0 sm:bottom-auto sm:top-24 sm:right-6 left-0 sm:left-auto right-0 bg-white/95 dark:bg-[#2a2420]/95 backdrop-blur-md rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl z-50 border-t sm:border border-[#E8DFC9] dark:border-white/10 w-full sm:w-80 max-h-[90vh] sm:max-h-[85vh] overflow-y-auto custom-scrollbar"
           >
             <div className="mb-6 flex items-center justify-between gap-3 border-b border-[#F2EAE0] pb-3 dark:border-white/10">
               <div className="flex items-center gap-3">
@@ -1250,11 +1600,12 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
                   <Sparkles className="w-5 h-5 text-[#A37B5C] dark:text-[#DECAA4]"/>
                   Chế độ hiển thị
                 </span>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {[
                     { id: 'cosmic', icon: Sparkles, label: 'Vũ trụ' },
                     { id: 'sacred', icon: Flower, label: 'Mantra' },
-                    { id: 'garden', icon: Wind, label: 'Bóng' }
+                    { id: 'lotus', icon: Flower, label: 'Hoa Sen' },
+                    { id: 'lotus-bud', icon: Flower, label: 'Búp Sen' }
                   ].map(mode => (
                     <button
                       key={mode.id}
@@ -1456,11 +1807,12 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
               )}
               
               {visualMode === 'sacred' && renderSacredGeometry()}
-              {visualMode === 'garden' && renderZenGarden()}
+              {visualMode === 'lotus' && renderLotus()}
+              {visualMode === 'lotus-bud' && renderLotusBud()}
             </motion.div>
           </AnimatePresence>
         </div>
-      ), [visualMode, phase, isMobile, renderParticles, renderSacredGeometry, renderZenGarden, getScale, getDuration, layer1, layer2, layer3, isActive])}
+      ), [visualMode, phase, isMobile, renderParticles, renderSacredGeometry, renderLotus, renderLotusBud, getScale, getDuration, layer1, layer2, layer3, isActive])}
 
         {/* Center text - Floating on top of visual */}
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none drop-shadow-sm z-30">
@@ -1496,6 +1848,21 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
                   {phaseText[phase]}
                 </motion.span>
                 <span className="text-8xl font-light mt-1 font-mono text-[#5A4D41] dark:text-[#F5EDE0]">{timeLeft || 0}</span>
+                <AnimatePresence mode="wait">
+                  {guidedText && (
+                    <motion.div
+                      key={guidedText}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="absolute top-40 w-[90vw] max-w-sm text-center z-50"
+                    >
+                      <p className="text-lg sm:text-xl font-medium text-[#4A3C31] dark:text-[#F5EDE0] leading-relaxed px-5 py-3.5 bg-white/60 dark:bg-[#1a1612]/80 backdrop-blur-xl rounded-2xl border border-[#E8DFC9] dark:border-white/10 shadow-[0_8px_30px_rgba(74,60,49,0.12)]">
+                        {guidedText}
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             ) : (
               <motion.span
@@ -1629,6 +1996,16 @@ export const Visualizer: React.FC<VisualizerProps> = ({ technique, onClose, dark
       <audio ref={inhaleAudioRef} src="/hit%20vao.mp3" preload="auto" />
       <audio ref={exhaleAudioRef} src="/tho%20ra.mp3" preload="auto" />
       <audio ref={holdAudioRef} src="/giu%20hoi%20tho.mp3" preload="auto" />
+      
+      {/* Guided Meditation Voiceover */}
+      {activeGuidedSession && (
+        <audio 
+          ref={guidedAudioRef} 
+          src={`/guided/${activeGuidedSession.id}.mp3`} 
+          preload="auto"
+          onEnded={handleFinish}
+        />
+      )}
       </div>
     </VisualizerErrorBoundary>
   );

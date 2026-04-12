@@ -114,3 +114,26 @@ export const calculateStatsFromSessions = (sessions: MeditationSession[]): Medit
     badges,
   };
 };
+
+export const getMonthlyHeatmapData = (
+  sessions: MeditationSession[],
+  year: number,
+  month: number
+): Map<string, { minutes: number; techniques: string[] }> => {
+  const map = new Map<string, { minutes: number; techniques: string[] }>();
+
+  for (const session of sessions) {
+    const sessionDate = parseStoredDate(session.date);
+    if (sessionDate.getFullYear() !== year || sessionDate.getMonth() !== month) continue;
+
+    const dateKey = getLocalDateString(sessionDate);
+    const existing = map.get(dateKey) || { minutes: 0, techniques: [] };
+    existing.minutes += Math.round(session.durationSeconds / 60);
+    if (!existing.techniques.includes(session.techniqueName)) {
+      existing.techniques.push(session.techniqueName);
+    }
+    map.set(dateKey, existing);
+  }
+
+  return map;
+};

@@ -3,6 +3,9 @@ export interface BreathingTechnique {
   name: string;
   description: string;
   benefit: string;
+  sourceLabel?: string;
+  sourceUrl?: string;
+  sourceNote?: string;
   pattern: {
     inhale: number; // seconds
     hold1: number;
@@ -10,6 +13,8 @@ export interface BreathingTechnique {
     hold2: number;
   };
   color: string;
+  isGuided?: boolean;
+  guidedSessionId?: string;
 }
 
 export interface MeditationSession {
@@ -69,6 +74,6 @@ export interface SiteVisit {
   created_at: string;
 }
 
-export type VisualMode = 'cosmic' | 'sacred' | 'garden';
+export type VisualMode = 'cosmic' | 'sacred' | 'lotus' | 'lotus-bud';
 
 export type MalaMaterial = 'agarwood' | 'jade' | 'tiger_eye';

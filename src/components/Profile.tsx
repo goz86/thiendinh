@@ -10,10 +10,12 @@ import {
   CheckCircle2,
   AlertCircle,
   RefreshCw,
+  Bell,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ACCOUNT_AVATARS, getUserAvatar, getUserDisplayName, isAdminEmail } from '../utils/auth';
 import { fetchProfile, syncProfile } from '../utils/profile';
+import { getReminderSetting, requestNotificationPermission, toggleReminderSetting } from '../utils/reminders';
 
 interface ProfileProps {
   user: any;
@@ -31,6 +33,15 @@ export const Profile: React.FC<ProfileProps> = ({ user, onBack, onLogout, onUser
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncingProfile, setIsSyncingProfile] = useState(false);
   const [message, setMessage] = useState<Notice>(null);
+
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderTime, setReminderTime] = useState('06:00');
+
+  useEffect(() => {
+    const { enabled, time } = getReminderSetting();
+    setReminderEnabled(enabled);
+    setReminderTime(time);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -54,7 +65,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onBack, onLogout, onUser
       }
     };
 
-    loadProfile();
+    void loadProfile();
 
     return () => {
       isMounted = false;
@@ -90,6 +101,12 @@ export const Profile: React.FC<ProfileProps> = ({ user, onBack, onLogout, onUser
       }
 
       if (data.user) onUserUpdated(data.user);
+
+      // Save reminder settings locally
+      toggleReminderSetting(reminderEnabled, reminderTime);
+      if (reminderEnabled) {
+        await requestNotificationPermission();
+      }
 
       setFullName(nextName);
       setSelectedAvatar(nextAvatar);
@@ -185,6 +202,36 @@ export const Profile: React.FC<ProfileProps> = ({ user, onBack, onLogout, onUser
                   className="w-full pl-12 pr-4 py-4 bg-[#F6F0E8] dark:bg-white/[0.03] border border-[#E8DFC9] dark:border-white/10 rounded-2xl text-[#8B7D6E] dark:text-[#B0A090] outline-none"
                 />
               </div>
+            </div>
+
+            <div className="pt-4 border-t border-[#E8DFC9] dark:border-white/10">
+              <label className="text-sm font-semibold text-[#4A3C31] dark:text-[#F5EDE0] mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-[#A37B5C]" />
+                  <span>Nhắc nhở thiền hàng ngày</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReminderEnabled(!reminderEnabled)}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors cursor-pointer ${reminderEnabled ? 'bg-[#A37B5C]' : 'bg-[#E8DFC9] dark:bg-white/10'}`}
+                >
+                  <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition shadow-sm ${reminderEnabled ? 'translate-x-[22px]' : 'translate-x-1'}`} />
+                </button>
+              </label>
+              
+              {reminderEnabled && (
+                <div className="mt-3 flex items-center gap-3">
+                  <input
+                    type="time"
+                    value={reminderTime}
+                    onChange={(e) => setReminderTime(e.target.value)}
+                    className="flex-1 py-3 px-4 bg-[#FCF9F3] dark:bg-white/5 border border-[#E8DFC9] dark:border-white/10 rounded-xl text-[#4A3C31] dark:text-[#F5EDE0] outline-none"
+                  />
+                  <p className="text-xs text-[#8B7D6E] dark:text-[#B0A090] max-w-[200px]">
+                    Đặt thời gian để nhận thông báo hít thở mỗi ngày.
+                  </p>
+                </div>
+              )}
             </div>
 
             <AnimatePresence>

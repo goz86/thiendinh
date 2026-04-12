@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mindful-breath-v2';
+const CACHE_NAME = 'mindful-breath-v3';
 const ASSETS = [
   '/',
   '/index.html',
@@ -59,4 +59,45 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+});
+
+
+self.addEventListener('push', (event) => {
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch {
+      data = { title: 'Mindful Breath', body: event.data.text() };
+    }
+  }
+
+  const title = data.title || 'Đã đến giờ hít thở chánh niệm 🌿';
+  const options = {
+    body: data.body || 'Mở ứng dụng để bắt đầu một buổi thiền ngắn, nuôi dưỡng sự bình an trong bạn.',
+    icon: '/icon512_maskable.png',
+    badge: '/icon512_maskable.png',
+    vibrate: [200, 100, 200],
+    data: {
+      url: data.url || '/'
+    }
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window' }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url === '/' && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow('/');
+      }
+    })
+  );
 });

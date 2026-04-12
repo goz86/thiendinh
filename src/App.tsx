@@ -5,8 +5,12 @@ import { techniques } from './data';
 import { supabase } from './lib/supabase';
 import type { BreathingTechnique } from './types';
 import { isAdminEmail } from './utils/auth';
-import { setActiveStorageScope, syncWithCloud } from './utils/storage';
+import { loadFavoriteTechniqueId } from './utils/favorites';
+import { loadJournalEntries, loadSessions, setActiveStorageScope, syncWithCloud } from './utils/storage';
 import { hasTrackedVisitThisSession, resetVisitTrackingSession, trackSiteVisit } from './utils/visits';
+import { shouldShowWeeklyRecap, markWeeklyRecapShown, buildWeeklyRecap } from './utils/weeklyRecap';
+import { startReminderCheckLoop } from './utils/reminders';
+import type { WeeklyRecapData } from './utils/weeklyRecap';
 
 type View =
   | 'library'
@@ -31,6 +35,7 @@ const MalaCounter = lazy(() => import('./components/MalaCounter').then((module) 
 const TempleTools = lazy(() => import('./components/TempleTools').then((module) => ({ default: module.TempleTools })));
 const Journal = lazy(() => import('./components/Journal').then((module) => ({ default: module.Journal })));
 const Profile = lazy(() => import('./components/Profile').then((module) => ({ default: module.Profile })));
+const WeeklyRecapComponent = lazy(() => import('./components/WeeklyRecap').then((module) => ({ default: module.WeeklyRecap })));
 const APP_STATE_SESSION_KEY = 'mindful-app-state';
 const DIRECT_ROUTE_VIEWS: View[] = ['stats', 'journal', 'profile', 'admin', 'mala', 'temple_tools', 'auth', 'custom', 'visualizer'];
 
@@ -76,14 +81,17 @@ function App() {
   const resolveStateFromLocation = (): { view: View; activeTechnique: BreathingTechnique | null } => {
     const viewFromPath = viewByPathname(window.location.pathname);
     const params = new URLSearchParams(window.location.search);
-    const techniqueId = params.get('technique');
+    const requestedTechniqueId = params.get('technique');
+    const techniqueId =
+      requestedTechniqueId === 'favorite' ? loadFavoriteTechniqueId() : requestedTechniqueId;
     const techniqueFromQuery = techniqueId ? techniques.find((item) => item.id === techniqueId) ?? null : null;
+    const fallbackView = techniqueFromQuery ? 'visualizer' : viewFromPath === 'visualizer' ? 'library' : viewFromPath;
 
     try {
       const raw = sessionStorage.getItem(APP_STATE_SESSION_KEY);
       if (!raw) {
         return {
-          view: techniqueFromQuery ? 'visualizer' : viewFromPath,
+          view: fallbackView,
           activeTechnique: techniqueFromQuery,
         };
       }
@@ -91,7 +99,7 @@ function App() {
       const parsed = JSON.parse(raw) as { view?: View; activeTechnique?: BreathingTechnique | null; path?: string };
       if (parsed.path === window.location.pathname) {
         return {
-          view: parsed.view ?? (techniqueFromQuery ? 'visualizer' : viewFromPath),
+          view: parsed.view ?? fallbackView,
           activeTechnique: techniqueFromQuery ?? parsed.activeTechnique ?? null,
         };
       }
@@ -100,7 +108,7 @@ function App() {
     }
 
     return {
-      view: techniqueFromQuery ? 'visualizer' : viewFromPath,
+      view: fallbackView,
       activeTechnique: techniqueFromQuery,
     };
   };
@@ -118,6 +126,29 @@ function App() {
     const saved = localStorage.getItem('mindful-dark-mode');
     return saved === 'true';
   });
+  const [weeklyRecapData, setWeeklyRecapData] = useState<WeeklyRecapData | null>(null);
+  const [showWeeklyRecap, setShowWeeklyRecap] = useState(false);
+
+  useEffect(() => {
+    const reminderInterval = startReminderCheckLoop();
+    return () => clearInterval(reminderInterval);
+  }, []);
+
+  useEffect(() => {
+    if (!shouldShowWeeklyRecap()) return;
+
+    const timer = window.setTimeout(() => {
+      const sessions = loadSessions();
+      const journals = loadJournalEntries();
+      const recap = buildWeeklyRecap(sessions, journals);
+      if (recap) {
+        setWeeklyRecapData(recap);
+        setShowWeeklyRecap(true);
+      }
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   type AppHistoryState = {
     __mindfulApp: true;
@@ -418,7 +449,7 @@ function App() {
         ) : view === 'auth' ? (
           <Auth onSuccess={goBackToLibrary} onBack={goBackToLibrary} />
         ) : view === 'stats' ? (
-          <Stats onBack={goBackToLibrary} />
+          <Stats onBack={goBackToLibrary} user={user} />
         ) : view === 'journal' ? (
           <Journal onBack={goBackToLibrary} />
         ) : view === 'admin' ? (
@@ -437,6 +468,18 @@ function App() {
           />
         ) : null}
       </Suspense>
+
+      {showWeeklyRecap && weeklyRecapData && (
+        <Suspense fallback={null}>
+          <WeeklyRecapComponent
+            data={weeklyRecapData}
+            onClose={() => {
+              setShowWeeklyRecap(false);
+              markWeeklyRecapShown();
+            }}
+          />
+        </Suspense>
+      )}
 
       {view === 'library' && (
         <div className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-[#E8DFC9] bg-white/85 px-3 pb-3 pt-2 backdrop-blur-xl dark:border-white/10 dark:bg-[#15110d]/90 md:hidden">

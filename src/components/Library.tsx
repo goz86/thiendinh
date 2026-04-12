@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import { techniques } from '../data';
+import { guidedSessions } from '../data/guidedSessions';
 import {
   Wind,
   Moon,
@@ -27,11 +29,17 @@ import {
   CloudRain,
   BrainCircuit,
   BedSingle,
+  Star,
 } from 'lucide-react';
 import type { BreathingTechnique, Mood } from '../types';
 import { getDailyQuote } from '../data/quotes';
-import { addJournalEntry, getLocalDateTimeString, syncWithCloud } from '../utils/storage';
+import {
+  addJournalEntry,
+  getLocalDateTimeString,
+  syncWithCloud,
+} from '../utils/storage';
 import { getUserAvatar, getUserDisplayName, isAdminEmail } from '../utils/auth';
+import { loadFavoriteTechniqueIds, subscribeToFavoriteTechnique, toggleFavoriteTechnique } from '../utils/favorites';
 
 interface LibraryProps {
   onSelect: (technique: BreathingTechnique) => void;
@@ -58,6 +66,10 @@ const iconMap: Record<string, React.ReactNode> = {
   'wim-hof': <Snowflake className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
   pranayama: <Flame className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
   sleep: <CloudMoon className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
+  coherent: <Heart className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
+  'physiological-sigh': <Zap className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
+  'alternate-nostril': <Wind className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
+  ocean: <Zap className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />,
 };
 
 const moodOptions: Array<{ value: Mood; label: string; icon: React.ComponentType<{ className?: string }> }> = [
@@ -119,15 +131,39 @@ export const Library: React.FC<LibraryProps> = ({
   const [quickMood, setQuickMood] = React.useState<Mood>('peaceful');
   const [quickNote, setQuickNote] = React.useState('');
   const [quickSaved, setQuickSaved] = React.useState(false);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [isCarouselPaused, setIsCarouselPaused] = useState(false);
+  const [favoriteTechniqueIds, setFavoriteTechniqueIds] = React.useState<string[]>(() => loadFavoriteTechniqueIds());
   const quote = getDailyQuote();
   const userName = getUserDisplayName(user);
+
+  React.useEffect(() => {
+    if (isCarouselPaused) return;
+    const interval = setInterval(() => {
+      setCarouselIndex(prev => (prev + 1) % guidedSessions.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isCarouselPaused, guidedSessions.length]);
   const userAvatar = getUserAvatar(user);
+  const orderedTechniques = React.useMemo(() => {
+    if (favoriteTechniqueIds.length === 0) return techniques;
+
+    const favoriteSet = new Set(favoriteTechniqueIds);
+    const favoriteItems = favoriteTechniqueIds
+      .map((favoriteId) => techniques.find((technique) => technique.id === favoriteId))
+      .filter((technique): technique is BreathingTechnique => Boolean(technique));
+    const otherItems = techniques.filter((technique) => !favoriteSet.has(technique.id));
+
+    return [...favoriteItems, ...otherItems];
+  }, [favoriteTechniqueIds]);
 
   React.useEffect(() => {
     if (user) {
       syncWithCloud();
     }
   }, [user]);
+
+  React.useEffect(() => subscribeToFavoriteTechnique(() => setFavoriteTechniqueIds(loadFavoriteTechniqueIds())), []);
 
   React.useEffect(() => {
     if (!quickSaved) return undefined;
@@ -146,6 +182,10 @@ export const Library: React.FC<LibraryProps> = ({
     });
     setQuickNote('');
     setQuickSaved(true);
+  };
+
+  const handleToggleFavorite = (techniqueId: string) => {
+    setFavoriteTechniqueIds(toggleFavoriteTechnique(techniqueId));
   };
 
   return (
@@ -208,23 +248,117 @@ export const Library: React.FC<LibraryProps> = ({
         </div>
       </div>
 
-      <div id="library-techniques-start" className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-        {techniques.map((tech) => (
-          <button
-            key={tech.id}
-            onClick={() => onSelect(tech)}
-            className="group relative flex cursor-pointer flex-col rounded-2xl border border-[#E8DFC9] bg-white/60 p-6 text-left shadow-[0_4px_20px_-4px_rgba(163,123,92,0.1)] transition-all hover:-translate-y-1 hover:bg-white/90 hover:shadow-[0_8px_30px_-4px_rgba(163,123,92,0.2)] dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+      <div className="mb-10 relative overflow-hidden">
+        <h2 className="mb-4 text-xl font-bold text-[#4A3C31] dark:text-[#F5EDE0]">Thiền Có Hướng Dẫn</h2>
+        
+        {/* Carousel Container */}
+        <div 
+          className="relative w-full overflow-hidden rounded-[28px]"
+          onMouseEnter={() => setIsCarouselPaused(true)}
+          onMouseLeave={() => setIsCarouselPaused(false)}
+        >
+          <motion.div 
+            className="flex gap-4 cursor-grab active:cursor-grabbing pb-2"
+            drag="x"
+            dragConstraints={{ right: 0, left: -((guidedSessions.length - 1) * 272) }} // card width (256) + gap (16)
+            animate={{ x: -(carouselIndex * 272) }}
+            transition={{ type: "spring", damping: 30, stiffness: 200 }}
+            onDragEnd={(_, info) => {
+              const threshold = 50;
+              if (info.offset.x < -threshold && carouselIndex < guidedSessions.length - 1) {
+                setCarouselIndex(prev => prev + 1);
+              } else if (info.offset.x > threshold && carouselIndex > 0) {
+                setCarouselIndex(prev => prev - 1);
+              }
+            }}
           >
-            <div className="mb-4 flex items-center justify-between">
-              <div className="rounded-xl border border-[#F2EAE0] bg-[#FCF9F3] p-3 shadow-inner dark:border-white/5 dark:bg-white/5">
+            {guidedSessions.map((session, idx) => (
+              <button
+                key={session.id}
+                onClick={() => {
+                  const targetTech = techniques.find(t => t.id === session.techniqueId) || techniques[0];
+                  onSelect({ ...targetTech, isGuided: true, guidedSessionId: session.id } as BreathingTechnique & { isGuided?: boolean, guidedSessionId?: string });
+                }}
+                className={`group relative flex w-64 shrink-0 flex-col items-start rounded-[24px] border border-[#E8DFC9] bg-gradient-to-br from-[#FCF9F3] to-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md dark:border-white/10 dark:from-[#2a2420] dark:to-[#1a1612] text-left ${idx === carouselIndex ? 'ring-2 ring-[#C2A385]/30' : 'opacity-80 scale-95'}`}
+              >
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-2xl shadow-sm dark:bg-black/20">
+                  {session.icon}
+                </div>
+                <h3 className="mb-2 text-lg font-bold text-[#4A3C31] dark:text-[#F5EDE0]">{session.name}</h3>
+                <p className="mb-4 text-xs leading-relaxed text-[#8B7D6E] dark:text-[#B0A090] line-clamp-2">
+                  {session.description}
+                </p>
+                <div className="mt-auto flex w-full items-center justify-between text-xs font-semibold text-[#A37B5C] dark:text-[#DECAA4]">
+                  <span>⏱ {session.totalDuration} phút</span>
+                  <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </div>
+              </button>
+            ))}
+          </motion.div>
+        </div>
+
+        {/* Indicators */}
+        <div className="mt-4 flex justify-center gap-2">
+          {guidedSessions.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => setCarouselIndex(idx)}
+              className={`h-1.5 rounded-full transition-all ${
+                idx === carouselIndex 
+                  ? 'w-6 bg-[#A37B5C]' 
+                  : 'w-2 bg-[#E8DFC9] dark:bg-white/10'
+              }`}
+              aria-label={`Đi đến bài thiền ${idx + 1}`}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl font-bold text-[#4A3C31] dark:text-[#F5EDE0]">Thở Tự Do</h2>
+      </div>
+      
+      <div id="library-techniques-start" className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        {orderedTechniques.map((tech) => (
+          <div
+            key={tech.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => onSelect(tech)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onSelect(tech);
+              }
+            }}
+            className="group relative flex cursor-pointer flex-col rounded-2xl border border-[#E8DFC9] bg-white/60 p-6 text-left shadow-[0_4px_20px_-4px_rgba(163,123,92,0.1)] transition-all hover:-translate-y-1 hover:bg-white/90 hover:shadow-[0_8px_30px_-4px_rgba(163,123,92,0.2)] dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 lg:min-h-[348px]"
+          >
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleToggleFavorite(tech.id);
+              }}
+              className={`absolute right-4 top-4 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border transition-all ${
+                favoriteTechniqueIds.includes(tech.id)
+                  ? 'border-amber-200 bg-amber-50 text-amber-500 shadow-sm dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-300'
+                  : 'border-[#F2EAE0] bg-white/90 text-[#C2A385] hover:border-[#D5B393] hover:text-[#A37B5C] dark:border-white/10 dark:bg-white/10 dark:text-[#DECAA4]/70'
+              }`}
+              aria-label={favoriteTechniqueIds.includes(tech.id) ? 'Bỏ yêu thích' : 'Đánh dấu yêu thích'}
+            >
+              <Star className="h-4.5 w-4.5" fill={favoriteTechniqueIds.includes(tech.id) ? 'currentColor' : 'none'} />
+            </button>
+
+            <div className="mb-3 flex items-center gap-3 pr-12">
+              <div className="shrink-0 rounded-xl border border-[#F2EAE0] bg-[#FCF9F3] p-3 shadow-inner dark:border-white/5 dark:bg-white/5">
                 {iconMap[tech.id] || <Wind className="h-6 w-6 text-[#A37B5C] dark:text-[#DECAA4]" />}
               </div>
-              <span className="rounded-full border border-[#F2EAE0] bg-[#FCF9F3] px-3 py-1 text-xs font-semibold text-[#A37B5C] dark:border-white/5 dark:bg-white/5 dark:text-[#DECAA4]">
+              <span className="inline-block rounded-full border border-[#F2EAE0] bg-[#FCF9F3] px-3 py-1 text-xs font-semibold leading-snug text-[#A37B5C] dark:border-white/5 dark:bg-white/5 dark:text-[#DECAA4]">
                 {cleanText(tech.benefit)}
               </span>
             </div>
 
-            <h3 className="mb-2 text-lg font-medium text-[#4A3C31] dark:text-[#F5EDE0]">{cleanText(tech.name)}</h3>
+            <h3 className="mb-2 text-[17px] font-semibold leading-snug text-[#4A3C31] dark:text-[#F5EDE0]">{cleanText(tech.name)}</h3>
             <p className="mb-5 flex-grow text-sm leading-relaxed text-[#8B7D6E] dark:text-[#B0A090]">{cleanText(tech.description)}</p>
 
             <div className="mt-auto flex items-center justify-between">
@@ -239,7 +373,7 @@ export const Library: React.FC<LibraryProps> = ({
               </div>
               <ChevronRight className="h-5 w-5 text-[#C2A385] transition-colors group-hover:text-[#A37B5C] dark:text-[#DECAA4]/50 dark:group-hover:text-[#DECAA4]" />
             </div>
-          </button>
+          </div>
         ))}
 
         <button
