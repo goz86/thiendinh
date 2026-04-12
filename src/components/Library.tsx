@@ -30,6 +30,7 @@ import {
   BrainCircuit,
   BedSingle,
   Star,
+  ChevronLeft,
 } from 'lucide-react';
 import type { BreathingTechnique, Mood } from '../types';
 import { getDailyQuote } from '../data/quotes';
@@ -112,7 +113,7 @@ const cleanText = (value: string) =>
     .replaceAll('T훱ng n훱ng l튼沼즢g', 'Tăng năng lượng')
     .replaceAll('C창n b梳켷g n훱ng l튼沼즢g', 'Cân bằng năng lượng')
     .replaceAll('Gi梳즡 lo 창u', 'Giảm lo âu')
-    .replaceAll('T梳춑 trung & B챙nh t칫nh', 'Tập trung & Bình tĩnh');
+    .replaceAll('T tập trung & Bình tĩnh', 'Tập trung & Bình tĩnh');
 
 export const Library: React.FC<LibraryProps> = ({
   onSelect,
@@ -131,8 +132,10 @@ export const Library: React.FC<LibraryProps> = ({
   const [quickMood, setQuickMood] = React.useState<Mood>('peaceful');
   const [quickNote, setQuickNote] = React.useState('');
   const [quickSaved, setQuickSaved] = React.useState(false);
-  const [carouselIndex, setCarouselIndex] = useState(0);
+  // Start in the middle of our tripled set for infinite feel
+  const [carouselIndex, setCarouselIndex] = useState(guidedSessions.length);
   const [isCarouselPaused, setIsCarouselPaused] = useState(false);
+  const CARD_WIDTH_TOTAL = 272; // width + gap
   const [favoriteTechniqueIds, setFavoriteTechniqueIds] = React.useState<string[]>(() => loadFavoriteTechniqueIds());
   const quote = getDailyQuote();
   const userName = getUserDisplayName(user);
@@ -140,7 +143,14 @@ export const Library: React.FC<LibraryProps> = ({
   React.useEffect(() => {
     if (isCarouselPaused) return;
     const interval = setInterval(() => {
-      setCarouselIndex(prev => (prev + 1) % guidedSessions.length);
+      setCarouselIndex(prev => {
+        const next = prev + 1;
+        // If we reach the end of the 3rd set, jump back to middle copy
+        if (next >= guidedSessions.length * 2) {
+          return guidedSessions.length; 
+        }
+        return next;
+      });
     }, 5000);
     return () => clearInterval(interval);
   }, [isCarouselPaused, guidedSessions.length]);
@@ -248,8 +258,24 @@ export const Library: React.FC<LibraryProps> = ({
         </div>
       </div>
 
-      <div className="mb-10 relative overflow-hidden">
+      <div className="mb-10 relative group">
         <h2 className="mb-4 text-xl font-bold text-[#4A3C31] dark:text-[#F5EDE0]">Thiền Có Hướng Dẫn</h2>
+        
+        {/* Navigation Arrows for PC */}
+        <div className="absolute right-0 top-0 z-10 hidden sm:flex gap-2">
+          <button 
+            onClick={() => setCarouselIndex(prev => prev - 1)}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E8DFC9] bg-white/60 text-[#A37B5C] shadow-sm transition-all hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-[#DECAA4]"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button 
+            onClick={() => setCarouselIndex(prev => prev + 1)}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E8DFC9] bg-white/60 text-[#A37B5C] shadow-sm transition-all hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-[#DECAA4]"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
         
         {/* Carousel Container */}
         <div 
@@ -260,26 +286,41 @@ export const Library: React.FC<LibraryProps> = ({
           <motion.div 
             className="flex gap-4 cursor-grab active:cursor-grabbing pb-2"
             drag="x"
-            dragConstraints={{ right: 0, left: -((guidedSessions.length - 1) * 272) }} // card width (256) + gap (16)
-            animate={{ x: -(carouselIndex * 272) }}
+            // Allow dragging freely, logic will snap it back
+            dragConstraints={{ left: -10000, right: 10000 }}
+            animate={{ x: -(carouselIndex * CARD_WIDTH_TOTAL) }}
             transition={{ type: "spring", damping: 30, stiffness: 200 }}
+            onUpdate={(latest) => {
+              // Seamless wrap around:
+              // If we drag beyond the bounds of one full set, jump instantly
+              const x = latest.x as number;
+              const currentPos = -x / CARD_WIDTH_TOTAL;
+              
+              if (currentPos >= guidedSessions.length * 2) {
+                setCarouselIndex(prev => prev - guidedSessions.length);
+              } else if (currentPos <= guidedSessions.length - 1) {
+                setCarouselIndex(prev => prev + guidedSessions.length);
+              }
+            }}
             onDragEnd={(_, info) => {
               const threshold = 50;
-              if (info.offset.x < -threshold && carouselIndex < guidedSessions.length - 1) {
-                setCarouselIndex(prev => prev + 1);
-              } else if (info.offset.x > threshold && carouselIndex > 0) {
-                setCarouselIndex(prev => prev - 1);
+              const dragOffset = Math.round(info.offset.x / CARD_WIDTH_TOTAL);
+              if (info.offset.x < -threshold) {
+                setCarouselIndex(prev => prev + Math.max(1, Math.abs(dragOffset)));
+              } else if (info.offset.x > threshold) {
+                setCarouselIndex(prev => prev - Math.max(1, Math.abs(dragOffset)));
               }
             }}
           >
-            {guidedSessions.map((session, idx) => (
+            {/* Render items 3 times for seamless looping buffer */}
+            {[...guidedSessions, ...guidedSessions, ...guidedSessions].map((session, idx) => (
               <button
-                key={session.id}
+                key={`${session.id}-${idx}`}
                 onClick={() => {
                   const targetTech = techniques.find(t => t.id === session.techniqueId) || techniques[0];
                   onSelect({ ...targetTech, isGuided: true, guidedSessionId: session.id } as BreathingTechnique & { isGuided?: boolean, guidedSessionId?: string });
                 }}
-                className={`group relative flex w-64 shrink-0 flex-col items-start rounded-[24px] border border-[#E8DFC9] bg-gradient-to-br from-[#FCF9F3] to-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md dark:border-white/10 dark:from-[#2a2420] dark:to-[#1a1612] text-left ${idx === carouselIndex ? 'ring-2 ring-[#C2A385]/30' : 'opacity-80 scale-95'}`}
+                className={`group relative flex w-64 shrink-0 flex-col items-start rounded-[24px] border border-[#E8DFC9] bg-gradient-to-br from-[#FCF9F3] to-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md dark:border-white/10 dark:from-[#2a2420] dark:to-[#1a1612] text-left ${(idx % guidedSessions.length) === (carouselIndex % guidedSessions.length) ? 'ring-2 ring-[#C2A385]/30' : 'opacity-80 scale-95'}`}
               >
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-2xl shadow-sm dark:bg-black/20">
                   {session.icon}
@@ -302,9 +343,9 @@ export const Library: React.FC<LibraryProps> = ({
           {guidedSessions.map((_, idx) => (
             <button
               key={idx}
-              onClick={() => setCarouselIndex(idx)}
+              onClick={() => setCarouselIndex(idx + guidedSessions.length)}
               className={`h-1.5 rounded-full transition-all ${
-                idx === carouselIndex 
+                (carouselIndex % guidedSessions.length) === idx 
                   ? 'w-6 bg-[#A37B5C]' 
                   : 'w-2 bg-[#E8DFC9] dark:bg-white/10'
               }`}
