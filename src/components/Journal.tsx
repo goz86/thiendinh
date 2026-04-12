@@ -2,7 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Calendar as CalendarIcon, MessageSquare, Trash2, Search } from 'lucide-react';
 import type { JournalEntry, Mood } from '../types';
-import { deleteJournalEntry, formatStoredDate, loadJournalEntries, parseStoredDate, syncWithCloud } from '../utils/storage';
+import {
+  deleteJournalEntry,
+  formatStoredDate,
+  loadJournalEntries,
+  parseStoredDate,
+  subscribeToStorageUpdates,
+  syncWithCloud,
+} from '../utils/storage';
 
 interface JournalProps {
   onBack: () => void;
@@ -31,13 +38,19 @@ export const Journal: React.FC<JournalProps> = ({ onBack }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const loadData = async () => {
-      await syncWithCloud();
+    const applyEntries = () => {
       const data = loadJournalEntries();
       setEntries(data.sort((a, b) => parseStoredDate(b.date).getTime() - parseStoredDate(a.date).getTime()));
     };
 
+    const loadData = async () => {
+      await syncWithCloud();
+      applyEntries();
+    };
+
     void loadData();
+    const unsubscribe = subscribeToStorageUpdates(applyEntries);
+    return unsubscribe;
   }, []);
 
   const handleDelete = async (id: string) => {

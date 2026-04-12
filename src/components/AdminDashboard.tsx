@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Users, Clock, Activity, Shield, Calendar, TrendingUp, Award, List } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { supabase } from '../lib/supabase';
@@ -16,7 +16,8 @@ interface TechniqueStat {
 
 interface RecentSession {
   id: string;
-  user_id: string;
+  user_id: string | null;
+  visitor_id?: string | null;
   technique_name: string;
   duration_seconds: number;
   created_at: string;
@@ -68,7 +69,9 @@ const dedupeRecentSessions = (sessions: RecentSession[]) => {
     const sessionTimestamp = new Date(session.created_at).getTime();
 
     return !allSessions.slice(0, index).some((previousSession) => {
-      if (previousSession.user_id !== session.user_id) return false;
+      const previousActor = previousSession.user_id || previousSession.visitor_id || previousSession.id;
+      const currentActor = session.user_id || session.visitor_id || session.id;
+      if (previousActor !== currentActor) return false;
       if (previousSession.technique_name !== session.technique_name) return false;
       if (previousSession.duration_seconds !== session.duration_seconds) return false;
 
@@ -84,10 +87,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const [stats, setStats] = useState<AdminStats>(EMPTY_STATS);
   const [errorMessage, setErrorMessage] = useState('');
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const refreshTimeoutRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    const fetchDashboard = async () => {
-      setLoading(true);
+  const fetchDashboard = useCallback(async (showLoading = true) => {
+      if (showLoading) {
+        setLoading(true);
+      }
 
       const {
         data: { session },
@@ -95,7 +100,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
       if (!session) {
         setIsAdmin(false);
-        setLoading(false);
+        if (showLoading) setLoading(false);
         return;
       }
 
@@ -103,7 +108,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
       if (!isAdminEmail(session.user.email)) {
         setIsAdmin(false);
-        setLoading(false);
+        if (showLoading) setLoading(false);
         return;
       }
 
@@ -115,7 +120,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       ] = await Promise.all([
         supabase
           .from('meditation_sessions')
-          .select('*, profiles(email)')
+          .select('id, user_id, visitor_id, technique_name, duration_seconds, created_at, profiles(email)')
           .order('created_at', { ascending: false }),
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
       ]);
@@ -127,7 +132,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         setErrorMessage(
           `Không thể truy cập dữ liệu quản trị lúc này (mã lỗi: ${error.code}). Hãy kiểm tra lại quyền RLS và quan hệ với bảng profiles.`
         );
-        setLoading(false);
+        if (showLoading) setLoading(false);
         return;
       }
 
@@ -196,11 +201,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         recentSessions: sessions.slice(0, 50),
       });
 
-      setLoading(false);
+      setErrorMessage('');
+      if (showLoading) setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void fetchDashboard(true);
+  }, [fetchDashboard]);
+
+  useEffect(() => {
+    if (!isAdmin) return undefined;
+
+    const scheduleRefresh = () => {
+      if (refreshTimeoutRef.current) {
+        window.clearTimeout(refreshTimeoutRef.current);
+      }
+
+      refreshTimeoutRef.current = window.setTimeout(() => {
+        void fetchDashboard(false);
+      }, 350);
     };
 
-    fetchDashboard();
-  }, []);
+    const channel = supabase
+      .channel('admin-dashboard-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'meditation_sessions' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'site_visits' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, scheduleRefresh)
+      .subscribe();
+
+    const intervalId = window.setInterval(() => {
+      void fetchDashboard(false);
+    }, 30000);
+
+    return () => {
+      window.clearInterval(intervalId);
+      if (refreshTimeoutRef.current) {
+        window.clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchDashboard, isAdmin]);
 
   const orderedLabels = useMemo(() => {
     const weekdayLabels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
@@ -412,8 +453,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                   ) : (
                     <div className={`${shouldScrollRecentSessions ? 'max-h-[960px] overflow-y-auto' : ''} divide-y divide-[#E8DFC9]/70 dark:divide-white/5`}>
                       {stats.recentSessions.map((session) => {
-                        const displayName = session.profiles?.email || 'Người dùng mới';
-                        const email = session.profiles?.email || 'Chưa có email';
+                        const displayName =
+                          session.profiles?.email || (session.user_id ? 'Người dùng mới' : 'Khách ẩn danh');
+                        const email =
+                          session.profiles?.email ||
+                          (session.visitor_id ? `visitor:${session.visitor_id.slice(-8)}` : 'Chưa có email');
 
                         return (
                           <div key={session.id} className="space-y-4 px-4 py-4">
@@ -463,8 +507,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                   </thead>
                   <tbody className="divide-y divide-[#E8DFC9]/50 dark:divide-white/5">
                     {stats.recentSessions.map((session) => {
-                      const displayName = session.profiles?.email || 'Người dùng mới';
-                      const email = session.profiles?.email || 'Chưa có email';
+                      const displayName =
+                        session.profiles?.email || (session.user_id ? 'Người dùng mới' : 'Khách ẩn danh');
+                      const email =
+                        session.profiles?.email ||
+                        (session.visitor_id ? `visitor:${session.visitor_id.slice(-8)}` : 'Chưa có email');
 
                       return (
                         <tr key={session.id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.01] transition-colors">

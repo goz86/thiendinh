@@ -1,11 +1,12 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BarChart3, BookOpen, House, UserCircle2 } from 'lucide-react';
 import { Library } from './components/Library';
+import { techniques } from './data';
 import { supabase } from './lib/supabase';
 import type { BreathingTechnique } from './types';
 import { isAdminEmail } from './utils/auth';
-import { setActiveStorageScope } from './utils/storage';
-import { trackSiteVisit } from './utils/visits';
+import { setActiveStorageScope, syncWithCloud } from './utils/storage';
+import { hasTrackedVisitThisSession, resetVisitTrackingSession, trackSiteVisit } from './utils/visits';
 
 type View =
   | 'library'
@@ -30,11 +31,85 @@ const MalaCounter = lazy(() => import('./components/MalaCounter').then((module) 
 const TempleTools = lazy(() => import('./components/TempleTools').then((module) => ({ default: module.TempleTools })));
 const Journal = lazy(() => import('./components/Journal').then((module) => ({ default: module.Journal })));
 const Profile = lazy(() => import('./components/Profile').then((module) => ({ default: module.Profile })));
+const APP_STATE_SESSION_KEY = 'mindful-app-state';
+const DIRECT_ROUTE_VIEWS: View[] = ['stats', 'journal', 'profile', 'admin', 'mala', 'temple_tools', 'auth', 'custom', 'visualizer'];
+
+const routeByView: Record<View, string> = {
+  library: '/',
+  custom: '/custom',
+  visualizer: '/visualizer',
+  stats: '/stats',
+  auth: '/auth',
+  admin: '/admin',
+  mala: '/mala',
+  temple_tools: '/temple-tools',
+  journal: '/journal',
+  profile: '/profile',
+};
+
+const viewByPathname = (pathname: string): View => {
+  switch (pathname) {
+    case '/custom':
+      return 'custom';
+    case '/visualizer':
+      return 'visualizer';
+    case '/stats':
+      return 'stats';
+    case '/auth':
+      return 'auth';
+    case '/admin':
+      return 'admin';
+    case '/mala':
+      return 'mala';
+    case '/temple-tools':
+      return 'temple_tools';
+    case '/journal':
+      return 'journal';
+    case '/profile':
+      return 'profile';
+    default:
+      return 'library';
+  }
+};
 
 function App() {
-  const [view, setView] = useState<View>('library');
+  const resolveStateFromLocation = (): { view: View; activeTechnique: BreathingTechnique | null } => {
+    const viewFromPath = viewByPathname(window.location.pathname);
+    const params = new URLSearchParams(window.location.search);
+    const techniqueId = params.get('technique');
+    const techniqueFromQuery = techniqueId ? techniques.find((item) => item.id === techniqueId) ?? null : null;
+
+    try {
+      const raw = sessionStorage.getItem(APP_STATE_SESSION_KEY);
+      if (!raw) {
+        return {
+          view: techniqueFromQuery ? 'visualizer' : viewFromPath,
+          activeTechnique: techniqueFromQuery,
+        };
+      }
+
+      const parsed = JSON.parse(raw) as { view?: View; activeTechnique?: BreathingTechnique | null; path?: string };
+      if (parsed.path === window.location.pathname) {
+        return {
+          view: parsed.view ?? (techniqueFromQuery ? 'visualizer' : viewFromPath),
+          activeTechnique: techniqueFromQuery ?? parsed.activeTechnique ?? null,
+        };
+      }
+    } catch {
+      // Ignore malformed session state and fall back to URL-only resolution.
+    }
+
+    return {
+      view: techniqueFromQuery ? 'visualizer' : viewFromPath,
+      activeTechnique: techniqueFromQuery,
+    };
+  };
+
+  const initialRouteStateRef = useRef(resolveStateFromLocation());
+  const [view, setView] = useState<View>(initialRouteStateRef.current.view);
   const [user, setUser] = useState<any>(null);
-  const [activeTechnique, setActiveTechnique] = useState<BreathingTechnique | null>(null);
+  const [authResolved, setAuthResolved] = useState(false);
+  const [activeTechnique, setActiveTechnique] = useState<BreathingTechnique | null>(initialRouteStateRef.current.activeTechnique);
   const libraryScrollYRef = useRef(0);
   const historyInitializedRef = useRef(false);
   const applyingPopStateRef = useRef(false);
@@ -50,6 +125,17 @@ function App() {
     activeTechnique: BreathingTechnique | null;
   };
 
+  const getUrlForState = (nextView: View, nextTechnique: BreathingTechnique | null) => {
+    const path = routeByView[nextView] ?? '/';
+    const url = new URL(window.location.origin + path);
+
+    if (nextView === 'visualizer' && nextTechnique?.id) {
+      url.searchParams.set('technique', nextTechnique.id);
+    }
+
+    return `${url.pathname}${url.search}`;
+  };
+
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
@@ -63,6 +149,10 @@ function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setActiveStorageScope(session?.user?.id ?? null);
+      if (session?.user) {
+        void syncWithCloud();
+      }
+      setAuthResolved(true);
     });
 
     const {
@@ -70,6 +160,13 @@ function App() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       setActiveStorageScope(session?.user?.id ?? null);
+      if (session?.user) {
+        void syncWithCloud();
+      }
+      if (!session?.user) {
+        resetVisitTrackingSession();
+      }
+      setAuthResolved(true);
       if (session?.user && view === 'auth') {
         setView('library');
       }
@@ -108,7 +205,13 @@ function App() {
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
       const state = event.state as AppHistoryState | null;
-      if (!state || !state.__mindfulApp) return;
+      if (!state || !state.__mindfulApp) {
+        const locationState = resolveStateFromLocation();
+        applyingPopStateRef.current = true;
+        setActiveTechnique(locationState.activeTechnique);
+        setView(locationState.view);
+        return;
+      }
 
       applyingPopStateRef.current = true;
       setActiveTechnique(state.activeTechnique ?? null);
@@ -158,8 +261,9 @@ function App() {
   };
 
   const isAdmin = isAdminEmail(user?.email);
-  const showLibraryShell = !['visualizer', 'custom', 'auth', 'admin'].includes(view);
+  const showLibraryShell = view === 'library';
   const activeOverlayView = ['stats', 'journal', 'mala', 'temple_tools', 'profile'].includes(view) ? view : null;
+  const fullscreenRouteFallback = DIRECT_ROUTE_VIEWS.includes(view);
   const mobileNavItems: Array<{ view: View; label: string; icon: typeof House }> = [
     { view: 'library', label: 'Trang chủ', icon: House },
     { view: 'stats', label: 'Tiến trình', icon: BarChart3 },
@@ -168,10 +272,10 @@ function App() {
   ];
 
   useEffect(() => {
-    if (view === 'admin' && !isAdmin) {
+    if (authResolved && view === 'admin' && !isAdmin) {
       setView('library');
     }
-  }, [view, isAdmin]);
+  }, [authResolved, view, isAdmin]);
 
   useEffect(() => {
     if (view === 'library') {
@@ -200,9 +304,19 @@ function App() {
       view,
       activeTechniqueId: activeTechnique?.id ?? null,
     });
+    const nextUrl = getUrlForState(view, activeTechnique);
+
+    sessionStorage.setItem(
+      APP_STATE_SESSION_KEY,
+      JSON.stringify({
+        path: routeByView[view] ?? '/',
+        view,
+        activeTechnique,
+      })
+    );
 
     if (!historyInitializedRef.current) {
-      window.history.replaceState(historyState, '', window.location.href);
+      window.history.replaceState(historyState, '', nextUrl);
       historyInitializedRef.current = true;
       lastHistoryKeyRef.current = historyKey;
       return;
@@ -218,13 +332,45 @@ function App() {
       return;
     }
 
-    window.history.pushState(historyState, '', window.location.href);
+    window.history.pushState(historyState, '', nextUrl);
     lastHistoryKeyRef.current = historyKey;
   }, [view, activeTechnique]);
 
   useEffect(() => {
-    trackSiteVisit(user?.id ?? null, window.location.pathname);
-  }, [user]);
+    if (!authResolved || hasTrackedVisitThisSession()) return;
+
+    void trackSiteVisit(user?.id ?? null, window.location.pathname);
+
+    const retryTimer = window.setTimeout(() => {
+      if (!hasTrackedVisitThisSession()) {
+        void trackSiteVisit(user?.id ?? null, window.location.pathname);
+      }
+    }, 3000);
+
+    return () => window.clearTimeout(retryTimer);
+  }, [authResolved, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+
+    const syncChannel = supabase
+      .channel(`user-cloud-sync-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'meditation_sessions', filter: `user_id=eq.${user.id}` },
+        () => void syncWithCloud()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'journal_entries', filter: `user_id=eq.${user.id}` },
+        () => void syncWithCloud()
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(syncChannel);
+    };
+  }, [user?.id]);
 
   return (
     <div className="min-h-screen bg-transparent text-[#5A4D41] transition-colors duration-500 dark:text-[#F5EDE0]">
@@ -247,7 +393,13 @@ function App() {
 
       <Suspense
         fallback={
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#FCF9F3]/70 backdrop-blur-sm dark:bg-[#0d0b09]/70">
+          <div
+            className={`fixed inset-0 z-40 flex items-center justify-center ${
+              fullscreenRouteFallback
+                ? 'bg-[#FCF9F3] dark:bg-[#0d0b09]'
+                : 'bg-[#FCF9F3]/70 backdrop-blur-sm dark:bg-[#0d0b09]/70'
+            }`}
+          >
             <div className="rounded-full border border-[#E8DFC9] bg-white/80 px-4 py-2 text-sm font-medium text-[#5A4D41] shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-[#F5EDE0]">
               Đang tải...
             </div>

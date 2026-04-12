@@ -5,15 +5,19 @@ import {
   parseStoredDate,
 } from './dateTime';
 import { calculateStatsFromSessions } from './stats';
+import { getVisitorId } from './visits';
 
 const SESSIONS_KEY = 'mindful-meditation-sessions';
 const JOURNAL_KEY = 'mindful-meditation-journal';
 const STORAGE_SCOPE_KEY = 'mindful-storage-scope';
 const JOURNAL_TABLE = 'journal_entries';
+const STORAGE_UPDATED_EVENT = 'mindful-storage-updated';
 
 type CloudSessionRow = {
   id: string;
   created_at: string;
+  user_id: string | null;
+  visitor_id: string | null;
   technique_id: string;
   technique_name: string;
   duration_seconds: number;
@@ -53,6 +57,11 @@ const readJson = <T,>(key: string): T[] => {
 
 const writeJson = <T,>(key: string, value: T[]) => {
   localStorage.setItem(key, JSON.stringify(value));
+};
+
+const notifyStorageUpdated = () => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(STORAGE_UPDATED_EVENT));
 };
 
 const getStorageScope = () => localStorage.getItem(STORAGE_SCOPE_KEY) || 'guest';
@@ -128,9 +137,11 @@ const isSameJournalEntry = (localEntry: JournalEntry, cloudEntry: CloudJournalRo
   return Math.abs(localDate.getTime() - cloudDate.getTime()) < 60_000;
 };
 
-const insertSessionToCloud = async (session: MeditationSession, userId: string) => {
+const insertSessionToCloud = async (session: MeditationSession, userId?: string | null) => {
+  const visitorId = getVisitorId();
   const { error } = await supabase.from('meditation_sessions').insert({
-    user_id: userId,
+    user_id: userId || null,
+    visitor_id: visitorId,
     technique_id: session.techniqueId,
     technique_name: session.techniqueName,
     duration_seconds: session.durationSeconds,
@@ -178,6 +189,7 @@ export const loadSessions = (): MeditationSession[] => {
 
 export const saveSessions = (sessions: MeditationSession[]) => {
   writeJson(getScopedKey(SESSIONS_KEY), sessions);
+  notifyStorageUpdated();
 };
 
 export const addSession = async (session: Omit<MeditationSession, 'id'>) => {
@@ -192,9 +204,7 @@ export const addSession = async (session: Omit<MeditationSession, 'id'>) => {
 
   try {
     const user = await getCurrentUser();
-    if (user) {
-      await insertSessionToCloud(newSession, user.id);
-    }
+    await insertSessionToCloud(newSession, user?.id ?? null);
   } catch (error) {
     console.error('Loi khi dong bo phien thien:', error);
   }
@@ -210,6 +220,7 @@ export const loadJournalEntries = (): JournalEntry[] => {
 
 export const saveJournalEntries = (entries: JournalEntry[]) => {
   writeJson(getScopedKey(JOURNAL_KEY), entries);
+  notifyStorageUpdated();
 };
 
 export const addJournalEntry = async (entry: Omit<JournalEntry, 'id'>) => {
@@ -348,4 +359,19 @@ export const syncWithCloud = async (): Promise<boolean> => {
     console.error('Loi khi dong bo du lieu:', error);
     return false;
   }
+};
+
+export const subscribeToStorageUpdates = (callback: () => void) => {
+  if (typeof window === 'undefined') {
+    return () => undefined;
+  }
+
+  const handler = () => callback();
+  window.addEventListener(STORAGE_UPDATED_EVENT, handler);
+  window.addEventListener('storage', handler);
+
+  return () => {
+    window.removeEventListener(STORAGE_UPDATED_EVENT, handler);
+    window.removeEventListener('storage', handler);
+  };
 };

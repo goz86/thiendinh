@@ -7,6 +7,8 @@ import {
   formatStoredDate,
   loadSessions,
   parseStoredDate,
+  subscribeToStorageUpdates,
+  syncWithCloud,
 } from '../utils/storage';
 import { calculateStatsFromSessions } from '../utils/stats';
 
@@ -19,13 +21,29 @@ export const Stats: React.FC<StatsProps> = ({ onBack }) => {
   const [sessions, setSessions] = useState<MeditationSession[]>([]);
 
   useEffect(() => {
-    const sessionData = loadSessions();
-    setStats(calculateStatsFromSessions(sessionData));
-    setSessions(
-      [...sessionData]
-        .sort((a, b) => parseStoredDate(b.date).getTime() - parseStoredDate(a.date).getTime())
-        .slice(0, 5)
-    );
+    const loadData = async () => {
+      await syncWithCloud();
+      const sessionData = loadSessions();
+      setStats(calculateStatsFromSessions(sessionData));
+      setSessions(
+        [...sessionData]
+          .sort((a, b) => parseStoredDate(b.date).getTime() - parseStoredDate(a.date).getTime())
+          .slice(0, 5)
+      );
+    };
+
+    void loadData();
+    const unsubscribe = subscribeToStorageUpdates(() => {
+      const sessionData = loadSessions();
+      setStats(calculateStatsFromSessions(sessionData));
+      setSessions(
+        [...sessionData]
+          .sort((a, b) => parseStoredDate(b.date).getTime() - parseStoredDate(a.date).getTime())
+          .slice(0, 5)
+      );
+    });
+
+    return unsubscribe;
   }, []);
 
   if (!stats) return null;

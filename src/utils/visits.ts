@@ -16,8 +16,18 @@ export const getVisitorId = () => {
   return next;
 };
 
-export const trackSiteVisit = async (userId?: string | null, pagePath = '/') => {
-  if (sessionStorage.getItem(VISIT_SESSION_KEY) === 'true') return;
+export const hasTrackedVisitThisSession = () => sessionStorage.getItem(VISIT_SESSION_KEY) === 'true';
+
+export const resetVisitTrackingSession = () => {
+  sessionStorage.removeItem(VISIT_SESSION_KEY);
+};
+
+export const trackSiteVisit = async (
+  userId?: string | null,
+  pagePath = '/',
+  attempt = 0
+): Promise<boolean> => {
+  if (hasTrackedVisitThisSession()) return true;
 
   try {
     const visitorId = getVisitorId();
@@ -29,12 +39,20 @@ export const trackSiteVisit = async (userId?: string | null, pagePath = '/') => 
 
     if (!error) {
       sessionStorage.setItem(VISIT_SESSION_KEY, 'true');
-    } else {
-      console.warn('Không thể ghi lượt ghé:', error.message);
+      return true;
     }
+
+    console.warn('Khong the ghi luot ghe:', error.message);
   } catch (error) {
-    console.warn('Không thể ghi lượt ghé:', error);
+    console.warn('Khong the ghi luot ghe:', error);
   }
+
+  if (attempt < 2) {
+    await new Promise((resolve) => window.setTimeout(resolve, 1200 * (attempt + 1)));
+    return trackSiteVisit(userId, pagePath, attempt + 1);
+  }
+
+  return false;
 };
 
 export const fetchSiteVisits = async (): Promise<SiteVisit[]> => {
