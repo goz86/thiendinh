@@ -151,7 +151,7 @@ export const Library: React.FC<LibraryProps> = ({
         }
         return next;
       });
-    }, 5000);
+    }, 7000); // Slower interval for a calmer feel
     return () => clearInterval(interval);
   }, [isCarouselPaused, guidedSessions.length]);
   const userAvatar = getUserAvatar(user);
@@ -289,16 +289,12 @@ export const Library: React.FC<LibraryProps> = ({
             // Allow dragging freely, logic will snap it back
             dragConstraints={{ left: -10000, right: 10000 }}
             animate={{ x: -(carouselIndex * CARD_WIDTH_TOTAL) }}
-            transition={{ type: "spring", damping: 30, stiffness: 200 }}
-            onUpdate={(latest) => {
-              // Seamless wrap around:
-              // If we drag beyond the bounds of one full set, jump instantly
-              const x = latest.x as number;
-              const currentPos = -x / CARD_WIDTH_TOTAL;
-              
-              if (currentPos >= guidedSessions.length * 2) {
+            transition={{ type: "spring", damping: 40, stiffness: 100 }}
+            onAnimationComplete={() => {
+              // Seamless wrap around after animation finish for stability
+              if (carouselIndex >= guidedSessions.length * 2) {
                 setCarouselIndex(prev => prev - guidedSessions.length);
-              } else if (currentPos <= guidedSessions.length - 1) {
+              } else if (carouselIndex <= guidedSessions.length - 1) {
                 setCarouselIndex(prev => prev + guidedSessions.length);
               }
             }}
